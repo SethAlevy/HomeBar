@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:yaml/yaml.dart';
+import 'package:yaml/yaml.dart' as yaml;
 import '../models/category.dart';
 
 class FileHandler {
@@ -22,7 +22,7 @@ class FileHandler {
         return [];
       }
       final content = await file.readAsString();
-      final yamlData = loadYaml(content) as Map<String, dynamic>?;
+      final yamlData = yaml.loadYaml(content) as Map<String, dynamic>?;
       if (yamlData == null) return [];
 
       final categoriesData = yamlData['categories'] as List<dynamic>?;
@@ -42,7 +42,7 @@ class FileHandler {
     try {
       final file = File(await _getFilePath());
       final yamlData = {'categories': categories.map((e) => e.toYaml()).toList()};
-      final yamlString = dumpYaml(yamlData);
+      final yamlString = yaml.dumpYaml(yamlData);
       await file.writeAsString(yamlString);
     } catch (e) {
       print('Error saving YAML file: $e');
