@@ -4,7 +4,7 @@ class Auth {
   static const String _passwordKey = 'edit_password';
   static const String _defaultPassword = 'admin123'; // Change this in production!
 
-  static final _storage = FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage();
 
   // Initialize password (call this at app start)
   static Future<void> init() async {

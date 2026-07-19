@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:yaml/yaml.dart' as yaml;
@@ -22,38 +23,34 @@ class FileHandler {
         return [];
       }
       final content = await file.readAsString();
-      final yamlData = yaml.loadYaml(content) as Map<String, dynamic>?;
-      if (yamlData == null) return [];
+      final root = yaml.loadYaml(content);
+      if (root is! Map) return [];
 
-      final categoriesData = yamlData['categories'] as List<dynamic>?;
-      if (categoriesData == null) return [];
+      final yamlData = Map<String, dynamic>.from(root);
+
+      final categoriesData = yamlData['categories'];
+      if (categoriesData is! List) return [];
 
       return categoriesData
-          .map((e) => Category.fromYaml(e as Map<String, dynamic>))
+          .map((e) => Category.fromYaml(Map<String, dynamic>.from(e as Map)))
           .toList();
-    } catch (e) {
-      print('Error loading YAML file: $e');
+    } catch (_) {
       return [];
     }
   }
 
   // Save categories to YAML file
   static Future<void> saveCategories(List<Category> categories) async {
-    try {
-      final file = File(await _getFilePath());
-      final yamlData = {'categories': categories.map((e) => e.toYaml()).toList()};
-      final yamlString = yaml.dumpYaml(yamlData);
-      await file.writeAsString(yamlString);
-    } catch (e) {
-      print('Error saving YAML file: $e');
-      rethrow;
-    }
+    final file = File(await _getFilePath());
+    final yamlData = {'categories': categories.map((e) => e.toYaml()).toList()};
+    final yamlString = const JsonEncoder.withIndent('  ').convert(yamlData);
+    await file.writeAsString(yamlString);
   }
 
   // Create default YAML file if it doesn't exist
   static Future<void> _createDefaultFile() async {
     final file = File(await _getFilePath());
-    final defaultContent = '''
+    const defaultContent = '''
 categories:
   - name: "Alcoholic"
     subcategories:

@@ -7,11 +7,13 @@ import '../services/auth.dart';
 class EditIngredientScreen extends StatefulWidget {
   final Ingredient? ingredient;
   final List<Category> allCategories;
+  final String? targetCategoryName;
 
   const EditIngredientScreen({
     super.key,
     this.ingredient,
     required this.allCategories,
+    this.targetCategoryName,
   });
 
   @override
@@ -25,6 +27,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
   late TextEditingController _descriptionController;
   late TextEditingController _bottlesCountController;
   late TextEditingController _tagsController;
+  final TextEditingController _passwordController = TextEditingController();
 
   bool _isEditing = false;
 
@@ -50,6 +53,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
     _descriptionController.dispose();
     _bottlesCountController.dispose();
     _tagsController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -62,36 +66,101 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
 
     final isPasswordCorrect = await Auth.checkPassword(password);
     if (!isPasswordCorrect) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Incorrect password!')),
       );
       return;
     }
 
+    final bottlesCount = int.tryParse(_bottlesCountController.text);
+    if (bottlesCount == null || bottlesCount < 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bottles count must be a non-negative number.')),
+      );
+      return;
+    }
+
     // Create or update ingredient
     final newIngredient = Ingredient(
-      name: _nameController.text,
-      producer: _producerController.text,
-      description: _descriptionController.text,
-      bottlesCount: int.tryParse(_bottlesCountController.text) ?? 0,
+      name: _nameController.text.trim(),
+      producer: _producerController.text.trim(),
+      description: _descriptionController.text.trim(),
+      bottlesCount: bottlesCount,
       tags: _tagsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
     );
 
-    // TODO: Add logic to update the ingredient in the correct category
-    // For now, we'll just save all categories back to the file
-    await FileHandler.saveCategories(widget.allCategories);
+    final updatedCategories = _upsertIngredientInTree(
+      widget.allCategories,
+      original: widget.ingredient,
+      replacement: newIngredient,
+      preferredCategoryName: widget.targetCategoryName,
+    );
 
+    await FileHandler.saveCategories(updatedCategories);
+
+    if (!mounted) return;
     Navigator.pop(context, newIngredient);
   }
 
+  List<Category> _upsertIngredientInTree(
+    List<Category> categories, {
+    required Ingredient? original,
+    required Ingredient replacement,
+    required String? preferredCategoryName,
+  }) {
+    bool replaced = false;
+    bool inserted = false;
+
+    Category walk(Category category) {
+      final localIngredients = List<Ingredient>.from(category.ingredients);
+
+      if (original != null) {
+        final index = localIngredients.indexWhere(
+          (i) => i.name == original.name && i.producer == original.producer,
+        );
+        if (index != -1) {
+          localIngredients[index] = replacement;
+          replaced = true;
+        }
+      }
+
+      final localSubcategories = category.subcategories.map(walk).toList();
+
+      if (!replaced && !inserted && preferredCategoryName != null && category.name == preferredCategoryName) {
+        localIngredients.add(replacement);
+        inserted = true;
+      }
+
+      return category.copyWith(
+        ingredients: localIngredients,
+        subcategories: localSubcategories,
+      );
+    }
+
+    final updated = categories.map(walk).toList();
+
+    if (!replaced && !inserted && updated.isNotEmpty) {
+      final first = updated.first;
+      final firstIngredients = List<Ingredient>.from(first.ingredients)..add(replacement);
+      updated[0] = first.copyWith(ingredients: firstIngredients);
+    }
+
+    return updated;
+  }
+
   Future<String?> _showPasswordDialog(BuildContext context) async {
+    _passwordController.clear();
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Enter Password'),
         content: TextField(
+          controller: _passwordController,
           obscureText: true,
           decoration: const InputDecoration(hintText: 'Password'),
+          autofocus: true,
         ),
         actions: [
           TextButton(
@@ -99,7 +168,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, 'admin123'), // Default password
+            onPressed: () => Navigator.pop(context, _passwordController.text),
             child: const Text('OK'),
           ),
         ],
@@ -122,7 +191,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: 'Name'),
-                validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                validator: (value) => value?.trim().isEmpty ?? true ? 'Required' : null,
               ),
               TextFormField(
                 controller: _producerController,
@@ -136,7 +205,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
                 controller: _bottlesCountController,
                 decoration: const InputDecoration(labelText: 'Bottles Count'),
                 keyboardType: TextInputType.number,
-                validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                validator: (value) => value?.trim().isEmpty ?? true ? 'Required' : null,
               ),
               TextFormField(
                 controller: _tagsController,

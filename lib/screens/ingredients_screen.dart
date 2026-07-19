@@ -7,12 +7,14 @@ class IngredientsScreen extends StatefulWidget {
   final List<Ingredient> ingredients;
   final String title;
   final List<Category> allCategories;
+  final String? sourceCategoryName;
 
   const IngredientsScreen({
     super.key,
     required this.ingredients,
     required this.title,
     required this.allCategories,
+    this.sourceCategoryName,
   });
 
   @override
@@ -97,6 +99,7 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
             builder: (context) => EditIngredientScreen(
               ingredient: null,
               allCategories: widget.allCategories,
+              targetCategoryName: widget.sourceCategoryName,
             ),
           ),
         ),
