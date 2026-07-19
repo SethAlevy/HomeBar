@@ -1,0 +1,56 @@
+categories:
+  - name: "Alcoholic"
+    subcategories:
+      - name: "Strong Alcohol"
+        subcategories:
+          - name: "Rum"
+            ingredients:
+              - name: "Bacardi"
+                producer: "Bacardi"
+                description: "White rum, 40% ABV"
+                bottles_count: 2
+                tags: ["white", "caribbean"]
+          - name: "Whiskey"
+            ingredients:
+              - name: "Jack Daniel's"
+                producer: "Brown-Forman"
+                description: "Tennessee whiskey"
+                bottles_count: 1
+                tags: ["american", "bourbon"]
+      - name: "Liqueurs"
+        subcategories:
+          - name: "Sweet"
+            ingredients:
+              - name: "Baileys"
+                producer: "Diageo"
+                description: "Irish cream liqueur"
+                bottles_count: 1
+                tags: ["cream", "irish"]
+  - name: "Non-Alcoholic"
+    subcategories:
+      - name: "Juices"
+        subcategories: []
+        ingredients:
+          - name: "Orange Juice"
+            producer: "Local Brand"
+            description: "Fresh orange juice"
+            bottles_count: 3
+            tags: ["citrus", "fresh"]
+      - name: "Soda"
+        subcategories: []
+        ingredients:
+          - name: "Coca-Cola"
+            producer: "The Coca-Cola Company"
+            description: "Classic cola"
+            bottles_count: 5
+            tags: ["sweet", "carbonated"]
+  - name: "Home Products"
+    subcategories:
+      - name: "Herbs"
+        subcategories: []
+        ingredients:
+          - name: "Mint"
+            producer: "Homegrown"
+            description: "Fresh mint leaves"
+            bottles_count: 0
+            tags: ["fresh", "garnish"]
