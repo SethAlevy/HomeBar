@@ -1,8 +1,18 @@
 import 'ingredient.dart';
 
+// One node in a tree of categories.
+//
+// Each category can contain:
+// 1) direct ingredients
+// 2) nested subcategories
 class Category {
+  // Name shown in the UI.
   final String name;
+
+  // Child categories (recursive structure).
   final List<Category> subcategories;
+
+  // Ingredients that belong directly to this category.
   final List<Ingredient> ingredients;
 
   Category({
@@ -11,7 +21,7 @@ class Category {
     this.ingredients = const [],
   });
 
-  // Convert to YAML-compatible map
+  // Converts this category (including children) to a serializable map.
   Map<String, dynamic> toYaml() => {
         'name': name,
         if (subcategories.isNotEmpty)
@@ -20,30 +30,41 @@ class Category {
           'ingredients': ingredients.map((e) => e.toYaml()).toList(),
       };
 
-  // Create from YAML map
+  // Parses category data from YAML.
+  // Notice recursive parsing for subcategories.
   factory Category.fromYaml(Map<String, dynamic> yaml) => Category(
-        name: yaml['name'] ?? '',
-        subcategories: (yaml['subcategories'] as List<dynamic>?)
-            ?.map((e) => Category.fromYaml(e as Map<String, dynamic>))
+    name: yaml['name'] ?? '',
+    subcategories: (yaml['subcategories'] as List?)
+            ?.map(
+              (item) => Category.fromYaml(
+                Map<String, dynamic>.from(item as Map),
+              ),
+            )
             .toList() ??
-            [],
-        ingredients: (yaml['ingredients'] as List<dynamic>?)
-            ?.map((e) => Ingredient.fromYaml(e as Map<String, dynamic>))
+        [],
+    ingredients: (yaml['ingredients'] as List?)
+            ?.map(
+              (item) => Ingredient.fromYaml(
+                Map<String, dynamic>.from(item as Map),
+              ),
+            )
             .toList() ??
-            [],
-      );
+        [],
+  );
 
-  // Get all ingredients recursively (including subcategories)
+  // Flattens this subtree into a single ingredient list.
+  // Useful for counters and global filtering.
   List<Ingredient> get allIngredients {
     final List<Ingredient> result = [];
     result.addAll(ingredients);
     for (final subcategory in subcategories) {
+      // Recursively collect from each child branch.
       result.addAll(subcategory.allIngredients);
     }
     return result;
   }
 
-  // Copy with updated fields
+  // Returns a copy with optional field replacements.
   Category copyWith({
     String? name,
     List<Category>? subcategories,

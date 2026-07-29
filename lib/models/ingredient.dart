@@ -1,8 +1,18 @@
+// Represents one item we keep in the home bar inventory.
 class Ingredient {
+  // Display name (e.g., "Bacardi", "Orange Juice").
   final String name;
+
+  // Brand or producer of the ingredient.
   final String producer;
+
+  // Free-form notes shown in the UI.
   final String description;
+
+  // Mutable count because users can update stock over time.
   int bottlesCount;
+
+  // Labels used for searching/filtering (e.g., "fresh", "bourbon").
   final List<String> tags;
 
   Ingredient({
@@ -13,7 +23,8 @@ class Ingredient {
     required this.tags,
   });
 
-  // Convert to YAML-compatible map
+  // Converts this object into a plain map that can be serialized.
+  // The keys are the data format used in our YAML file.
   Map<String, dynamic> toYaml() => {
         'name': name,
         'producer': producer,
@@ -22,7 +33,8 @@ class Ingredient {
         'tags': tags,
       };
 
-  // Create from YAML map
+  // Creates an Ingredient from parsed YAML data.
+  // Fallback defaults keep the app stable when a field is missing.
   factory Ingredient.fromYaml(Map<String, dynamic> yaml) => Ingredient(
         name: yaml['name'] ?? '',
         producer: yaml['producer'] ?? '',
@@ -31,19 +43,4 @@ class Ingredient {
         tags: List<String>.from(yaml['tags'] ?? []),
       );
 
-  // Copy with updated fields
-  Ingredient copyWith({
-    String? name,
-    String? producer,
-    String? description,
-    int? bottlesCount,
-    List<String>? tags,
-  }) =>
-      Ingredient(
-        name: name ?? this.name,
-        producer: producer ?? this.producer,
-        description: description ?? this.description,
-        bottlesCount: bottlesCount ?? this.bottlesCount,
-        tags: tags ?? this.tags,
-      );
 }

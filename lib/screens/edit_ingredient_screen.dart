@@ -4,9 +4,15 @@ import '../models/category.dart';
 import '../services/file_handler.dart';
 import '../services/auth.dart';
 
+// Form screen used for both creating and editing ingredients.
 class EditIngredientScreen extends StatefulWidget {
+  // Existing item to edit; null means "create new" mode.
   final Ingredient? ingredient;
+
+  // Full category tree that will be updated and persisted.
   final List<Category> allCategories;
+
+  // Preferred category for inserting new ingredient.
   final String? targetCategoryName;
 
   const EditIngredientScreen({
@@ -21,19 +27,27 @@ class EditIngredientScreen extends StatefulWidget {
 }
 
 class _EditIngredientScreenState extends State<EditIngredientScreen> {
+  // Used to validate required fields before submit.
   final _formKey = GlobalKey<FormState>();
+
+  // Controllers keep text field values and let us read them on submit.
   late TextEditingController _nameController;
   late TextEditingController _producerController;
   late TextEditingController _descriptionController;
   late TextEditingController _bottlesCountController;
   late TextEditingController _tagsController;
+
+  // Separate controller for password dialog input.
   final TextEditingController _passwordController = TextEditingController();
 
+  // True when editing existing item, false when creating new one.
   bool _isEditing = false;
 
   @override
   void initState() {
     super.initState();
+
+    // If ingredient is provided, prefill form with existing values.
     _isEditing = widget.ingredient != null;
     _nameController = TextEditingController(text: widget.ingredient?.name ?? '');
     _producerController = TextEditingController(text: widget.ingredient?.producer ?? '');
@@ -48,6 +62,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
 
   @override
   void dispose() {
+    // Always dispose controllers in StatefulWidget to avoid memory leaks.
     _nameController.dispose();
     _producerController.dispose();
     _descriptionController.dispose();
@@ -57,10 +72,11 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
     super.dispose();
   }
 
+  // Validates form, verifies password, updates category tree, and persists data.
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Check password
+    // Ask for password before allowing write operations.
     final password = await _showPasswordDialog(context);
     if (password == null) return;
 
@@ -73,6 +89,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
       return;
     }
 
+    // Convert bottle count safely and enforce non-negative values.
     final bottlesCount = int.tryParse(_bottlesCountController.text);
     if (bottlesCount == null || bottlesCount < 0) {
       if (!mounted) return;
@@ -82,15 +99,17 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
       return;
     }
 
-    // Create or update ingredient
+    // Build Ingredient object from form values.
     final newIngredient = Ingredient(
       name: _nameController.text.trim(),
       producer: _producerController.text.trim(),
       description: _descriptionController.text.trim(),
       bottlesCount: bottlesCount,
+      // User types comma-separated tags; normalize whitespace and drop empty ones.
       tags: _tagsController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
     );
 
+    // Apply add/update in a pure-tree transformation.
     final updatedCategories = _upsertIngredientInTree(
       widget.allCategories,
       original: widget.ingredient,
@@ -98,12 +117,20 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
       preferredCategoryName: widget.targetCategoryName,
     );
 
+    // Persist whole tree snapshot.
     await FileHandler.saveCategories(updatedCategories);
 
     if (!mounted) return;
+    // Return to previous screen with created/updated object as result payload.
     Navigator.pop(context, newIngredient);
   }
 
+  // Recursively updates an existing ingredient or inserts a new one.
+  //
+  // Strategy:
+  // 1) If editing: locate by (name + producer) and replace.
+  // 2) If adding: insert into preferred category when available.
+  // 3) Fallback: insert into first top-level category.
   List<Category> _upsertIngredientInTree(
     List<Category> categories, {
     required Ingredient? original,
@@ -113,10 +140,12 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
     bool replaced = false;
     bool inserted = false;
 
+    // Depth-first recursive rebuild of category nodes.
     Category walk(Category category) {
       final localIngredients = List<Ingredient>.from(category.ingredients);
 
       if (original != null) {
+        // Basic identity rule for "same" ingredient in current implementation.
         final index = localIngredients.indexWhere(
           (i) => i.name == original.name && i.producer == original.producer,
         );
@@ -129,6 +158,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
       final localSubcategories = category.subcategories.map(walk).toList();
 
       if (!replaced && !inserted && preferredCategoryName != null && category.name == preferredCategoryName) {
+        // For creation flow: add to requested category exactly once.
         localIngredients.add(replacement);
         inserted = true;
       }
@@ -142,6 +172,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
     final updated = categories.map(walk).toList();
 
     if (!replaced && !inserted && updated.isNotEmpty) {
+      // Last-resort insertion to avoid dropping user input.
       final first = updated.first;
       final firstIngredients = List<Ingredient>.from(first.ingredients)..add(replacement);
       updated[0] = first.copyWith(ingredients: firstIngredients);
@@ -150,6 +181,8 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
     return updated;
   }
 
+  // Prompts for password and returns entered value.
+  // Returns null when cancelled.
   Future<String?> _showPasswordDialog(BuildContext context) async {
     _passwordController.clear();
     return showDialog<String>(
@@ -205,6 +238,7 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
                 controller: _bottlesCountController,
                 decoration: const InputDecoration(labelText: 'Bottles Count'),
                 keyboardType: TextInputType.number,
+                // Minimal validation here; full numeric validation runs in _submit.
                 validator: (value) => value?.trim().isEmpty ?? true ? 'Required' : null,
               ),
               TextFormField(
