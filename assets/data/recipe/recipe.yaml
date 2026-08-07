@@ -1,0 +1,26 @@
+cocktails:
+  - name: Margarita
+    ingredients:
+      - [Tequila, 1 porcja]
+      - [Triple Sec, 1/2 porcja]
+      - [Sok z limonki, 1/2 porcja]
+    instructions: 
+      1. Umieść wszystkie składniki w shakerze z lodem.
+      2. Wstrząśnij energicznie przez kilka sekund.
+      3. Przelej do szklanki.
+    tags: ["tequila", "margarita", "orzeźwiający", "szejkowany", "klasyczny"]
+
+  - name: Whisky Sour
+    ingredients:
+      - [Whiskey, 1 porcja]
+      - [Sok z cytryny, 1/2 porcja]
+      - [Syrop cukrowy, 1/4 porcja]
+      - [Foamer, 3 kropele]
+      - [Angostura Bitters, 1 dash]
+    instructions:
+      1. Umieść whiskey, sok z cytryny, syrop cukrowy i foamer w szejkerze.
+      2. Wstrząśnij energicznie bez lodu, aby spienić.
+      3. Dodaj lód i wstrząśnij ponownie przez kilka sekund.
+      4. Przelej do szklanki wypełnionej lodem.
+      5. Dodaj dash Angostura Bitters.
+    tags: ["whiskey", "sour", "szejkowany", "klasyczny"]
