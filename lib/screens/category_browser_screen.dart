@@ -24,12 +24,6 @@ class CategoryBrowserScreen extends StatefulWidget {
 
 class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
   List<Category> _categories = [];
-
-  // Which template _categories was loaded from - threaded down into
-  // IngredientsScreen/EditIngredientScreen so that adding or editing an
-  // ingredient saves back to this same template, not some other one.
-  TemplateFile? _activeTemplate;
-
   bool _isLoading = true;
 
   @override
@@ -39,13 +33,16 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
   }
 
   Future<void> _loadCategories() async {
+    // Which ingredient template is "active" only matters for figuring out
+    // *what* to load here - IngredientsScreen further down is read-only
+    // (see its docs), so there's no need to keep the template itself
+    // around afterwards.
     final template = await TemplateService.resolveActiveIngredientTemplate();
     final categories = await TemplateService.loadTemplateCategories(template);
 
     if (!mounted) return;
 
     setState(() {
-      _activeTemplate = template;
       _categories = categories;
       _isLoading = false;
     });
@@ -62,9 +59,6 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
           ingredients: _categories.expand((c) => c.allIngredients).toList(),
           title: 'Wszystkie składniki',
           allCategories: _categories,
-          // Only reachable once loading has finished (see build() below),
-          // so _activeTemplate is always set by this point.
-          activeTemplate: _activeTemplate!,
         ),
       ),
     );
@@ -102,7 +96,6 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
                   (category) => CategoryTreeItem(
                     category: category,
                     allCategories: _categories,
-                    activeTemplate: _activeTemplate!,
                   ),
                 ),
               ],
@@ -130,16 +123,10 @@ class CategoryTreeItem extends StatefulWidget {
   // used anywhere in the app, not just under this category.
   final List<Category> allCategories;
 
-  // Which template allCategories came from - passed through unchanged so
-  // that adding/editing an ingredient from anywhere in this tree saves
-  // back to the right template.
-  final TemplateFile activeTemplate;
-
   const CategoryTreeItem({
     super.key,
     required this.category,
     required this.allCategories,
-    required this.activeTemplate,
   });
 
   @override
@@ -208,8 +195,6 @@ class _CategoryTreeItemState extends State<CategoryTreeItem> {
                       ingredients: ingredients,
                       title: widget.category.name,
                       allCategories: widget.allCategories,
-                      sourceCategoryName: widget.category.name,
-                      activeTemplate: widget.activeTemplate,
                     ),
                   ),
                 );
@@ -250,7 +235,6 @@ class _CategoryTreeItemState extends State<CategoryTreeItem> {
                     (subcategory) => CategoryTreeItem(
                       category: subcategory,
                       allCategories: widget.allCategories,
-                      activeTemplate: widget.activeTemplate,
                     ),
                   )
                   .toList(),

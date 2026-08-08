@@ -108,8 +108,8 @@ class _EditTemplateIngredientDialogState extends State<EditTemplateIngredientDia
   }
 
   void _save() {
-    // Mirrors the "name is required" rule from EditIngredientScreen - an
-    // ingredient with no name would be unusable everywhere else it's shown.
+    // Name is required - an ingredient with no name would be unusable
+    // everywhere else it's shown.
     if (_nameController.text.trim().isEmpty) return;
 
     final updated = Ingredient(
