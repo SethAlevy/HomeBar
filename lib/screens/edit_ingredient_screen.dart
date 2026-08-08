@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/ingredient.dart';
 import '../models/category.dart';
-import '../services/file_handler.dart';
+import '../services/template_service.dart';
 import '../services/auth.dart';
 
 // ============================================================================
@@ -18,8 +18,13 @@ class EditIngredientScreen extends StatefulWidget {
 
   // The full category tree this ingredient belongs (or will belong) to.
   // We need the *whole* tree, not just one category, because saving has
-  // to write the entire file back out (see FileHandler.saveCategories).
+  // to write the entire template back out (see
+  // TemplateService.saveTemplateCategories).
   final List<Category> allCategories;
+
+  // Which template allCategories came from - saving writes back to this
+  // exact template, via TemplateService.
+  final TemplateFile activeTemplate;
 
   // When creating a new ingredient, which category to drop it into by
   // default (e.g. "the category the user was browsing when they tapped
@@ -30,6 +35,7 @@ class EditIngredientScreen extends StatefulWidget {
     super.key,
     this.ingredient,
     required this.allCategories,
+    required this.activeTemplate,
     this.targetCategoryName,
   });
 
@@ -156,9 +162,9 @@ class _EditIngredientScreenState extends State<EditIngredientScreen> {
       preferredCategoryName: widget.targetCategoryName,
     );
 
-    // Save the entire updated tree - FileHandler always writes the whole
-    // file, there's no partial/incremental save.
-    await FileHandler.saveCategories(updatedCategories);
+    // Save the entire updated tree back to the active template - this
+    // always writes the whole file, there's no partial/incremental save.
+    await TemplateService.saveTemplateCategories(widget.activeTemplate, updatedCategories);
 
     if (!mounted) return;
     // Close this screen and hand the created/updated Ingredient back to

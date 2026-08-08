@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/ingredient.dart';
 import '../models/category.dart';
+import '../services/template_service.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/top_nav_tiles.dart';
 import 'edit_ingredient_screen.dart';
@@ -31,11 +32,17 @@ class IngredientsScreen extends StatefulWidget {
   // Where a newly added ingredient should be inserted by default.
   final String? sourceCategoryName;
 
+  // Which template allCategories came from - passed straight through to
+  // EditIngredientScreen so a new/edited ingredient gets saved back to the
+  // right template.
+  final TemplateFile activeTemplate;
+
   const IngredientsScreen({
     super.key,
     required this.ingredients,
     required this.title,
     required this.allCategories,
+    required this.activeTemplate,
     this.sourceCategoryName,
   });
 
@@ -160,7 +167,7 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
         // Passing ingredient: null tells EditIngredientScreen "create new"
         // mode instead of "edit existing" mode. The result it pops back
         // with (the created Ingredient) isn't consumed here yet, but the
-        // screen already persists it via FileHandler internally.
+        // screen already persists it via TemplateService internally.
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(
@@ -168,6 +175,7 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
               ingredient: null,
               allCategories: widget.allCategories,
               targetCategoryName: widget.sourceCategoryName,
+              activeTemplate: widget.activeTemplate,
             ),
           ),
         ),

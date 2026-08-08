@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/category.dart';
-import '../services/file_handler.dart';
+import '../services/template_service.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/top_nav_tiles.dart';
 import 'ingredients_screen.dart';
@@ -10,8 +10,10 @@ import 'ingredients_screen.dart';
 // CategoryBrowserScreen
 // ----------------------------------------------------------------------------
 // Entry point for browsing ingredients organized by category. It loads the
-// full category tree once (via FileHandler, which reads the user's saved
-// YAML file), then renders it as a list of expandable CategoryTreeItem rows.
+// full category tree once - from whichever ingredient template is
+// currently "active" (see TemplateService.resolveActiveIngredientTemplate,
+// which is driven by the selection made in "Zarządzaj zestawami") - then
+// renders it as a list of expandable CategoryTreeItem rows.
 // ============================================================================
 class CategoryBrowserScreen extends StatefulWidget {
   const CategoryBrowserScreen({super.key});
@@ -22,6 +24,12 @@ class CategoryBrowserScreen extends StatefulWidget {
 
 class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
   List<Category> _categories = [];
+
+  // Which template _categories was loaded from - threaded down into
+  // IngredientsScreen/EditIngredientScreen so that adding or editing an
+  // ingredient saves back to this same template, not some other one.
+  TemplateFile? _activeTemplate;
+
   bool _isLoading = true;
 
   @override
@@ -31,11 +39,13 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
   }
 
   Future<void> _loadCategories() async {
-    final categories = await FileHandler.loadCategories();
+    final template = await TemplateService.resolveActiveIngredientTemplate();
+    final categories = await TemplateService.loadTemplateCategories(template);
 
     if (!mounted) return;
 
     setState(() {
+      _activeTemplate = template;
       _categories = categories;
       _isLoading = false;
     });
@@ -52,6 +62,9 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
           ingredients: _categories.expand((c) => c.allIngredients).toList(),
           title: 'Wszystkie składniki',
           allCategories: _categories,
+          // Only reachable once loading has finished (see build() below),
+          // so _activeTemplate is always set by this point.
+          activeTemplate: _activeTemplate!,
         ),
       ),
     );
@@ -89,6 +102,7 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
                   (category) => CategoryTreeItem(
                     category: category,
                     allCategories: _categories,
+                    activeTemplate: _activeTemplate!,
                   ),
                 ),
               ],
@@ -116,10 +130,16 @@ class CategoryTreeItem extends StatefulWidget {
   // used anywhere in the app, not just under this category.
   final List<Category> allCategories;
 
+  // Which template allCategories came from - passed through unchanged so
+  // that adding/editing an ingredient from anywhere in this tree saves
+  // back to the right template.
+  final TemplateFile activeTemplate;
+
   const CategoryTreeItem({
     super.key,
     required this.category,
     required this.allCategories,
+    required this.activeTemplate,
   });
 
   @override
@@ -189,6 +209,7 @@ class _CategoryTreeItemState extends State<CategoryTreeItem> {
                       title: widget.category.name,
                       allCategories: widget.allCategories,
                       sourceCategoryName: widget.category.name,
+                      activeTemplate: widget.activeTemplate,
                     ),
                   ),
                 );
@@ -229,6 +250,7 @@ class _CategoryTreeItemState extends State<CategoryTreeItem> {
                     (subcategory) => CategoryTreeItem(
                       category: subcategory,
                       allCategories: widget.allCategories,
+                      activeTemplate: widget.activeTemplate,
                     ),
                   )
                   .toList(),

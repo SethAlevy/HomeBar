@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../services/settings_service.dart';
 import '../services/template_service.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/create_template_dialog.dart';
 import 'template_content_screen.dart';
 
 // ============================================================================
 // ManageHomebarsScreen
 // ----------------------------------------------------------------------------
-// This screen is the "management panel" for template files: the bundled
-// YAML files that describe an ingredient list or a recipe list. From here
-// the user can:
+// This screen is the "management panel" for template files: YAML files
+// that describe an ingredient list or a recipe list. From here the user
+// can:
 //   1) pick which templates are the "active" ones for this homebar,
-//   2) browse/inspect the content of any template, and
-//   3) create a new (currently placeholder) ingredient template.
+//   2) browse/inspect (and edit) the content of any template, and
+//   3) create a brand-new ingredient template from scratch.
 //
 // It is a StatefulWidget because it needs to remember things across
 // rebuilds: the list of templates loaded from disk/assets, whether we are
@@ -34,8 +36,12 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
   List<TemplateFile> _templates = [];
 
   // Path of the template currently marked as "active" for ingredients/recipes.
-  // These are just labels shown on screen for now - see the note on
-  // _selectTemplate() below about what "applying" a template does today.
+  // Persisted via SettingsService (see _loadSelection/_selectTemplate below)
+  // so the choice survives closing and reopening the app. The ingredient
+  // one drives what CategoryBrowserScreen actually loads (see
+  // TemplateService.resolveActiveIngredientTemplate) - see the note on
+  // _selectTemplate() below for the recipe one, which is still just a
+  // label for now.
   String? _selectedIngredientTemplate;
   String? _selectedRecipeTemplate;
 
@@ -48,6 +54,7 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
     // created - a good place to kick off one-time setup like loading data.
     super.initState();
     _loadTemplates();
+    _loadSelection();
   }
 
   // Asks TemplateService to scan for bundled templates, then stores the
@@ -66,6 +73,22 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
     });
   }
 
+  // Restores whichever templates were selected the last time this screen
+  // was used, so "Wczytaj szablon" doesn't silently forget the choice
+  // every time the app restarts. Runs independently of _loadTemplates()
+  // above - the selection is just remembered file paths, so it doesn't
+  // need the bundled template list to be loaded first.
+  Future<void> _loadSelection() async {
+    final settings = await SettingsService.load();
+
+    if (!mounted) return;
+
+    setState(() {
+      _selectedIngredientTemplate = settings.selectedIngredientTemplatePath;
+      _selectedRecipeTemplate = settings.selectedRecipeTemplatePath;
+    });
+  }
+
   // Convenience getters that filter the full template list down to just
   // ingredients or just recipes. They recompute on every access rather than
   // being cached - fine here since `_templates` is small and these are only
@@ -81,9 +104,12 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
   // Opens the "Wczytaj szablon" (Load template) dialog, where the user picks
   // one ingredient template and one recipe template to mark as active.
   //
-  // NOTE for learners: this only updates local screen state for display
-  // purposes right now - it does not yet make the app actually load data
-  // from the chosen files (that would live in a service like FileHandler).
+  // NOTE for learners: the ingredient pick here is what
+  // TemplateService.resolveActiveIngredientTemplate() reads back (via
+  // SettingsService) to decide what CategoryBrowserScreen shows - so
+  // confirming a new ingredient template here really does switch the
+  // app's active inventory. The recipe pick is still just a label for now:
+  // there's no recipe-browsing screen yet to hand it off to.
   Future<void> _selectTemplate() async {
     // These are *temporary* picks made inside the dialog. We don't touch the
     // real _selectedIngredientTemplate/_selectedRecipeTemplate fields until
@@ -151,24 +177,52 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
         _selectedIngredientTemplate = tempIngredient;
         _selectedRecipeTemplate = tempRecipe;
       });
+
+      // Persist the choice so it's still selected next time this screen -
+      // or the home screen's summary - is opened, even after the app is
+      // fully closed and reopened.
+      await SettingsService.saveSelectedTemplates(
+        ingredientTemplatePath: tempIngredient,
+        recipeTemplatePath: tempRecipe,
+      );
     }
   }
 
-  // Placeholder flow for creating a brand-new ingredient template.
-  // Today TemplateService.createIngredientTemplate() just hands back the
-  // existing default template info rather than creating a new file - it's a
-  // stand-in until real "new template" creation is implemented.
+  // Opens the "new template" dialog (name + a flat list of category
+  // names - nothing more), then actually creates the file, makes it the
+  // active ingredient template, and re-scans so it shows up in every
+  // template picker from now on.
   Future<void> _addNewIngredientTemplate() async {
-    final template = await TemplateService.createIngredientTemplate();
+    final result = await showDialog<CreateTemplateResult>(
+      context: context,
+      builder: (context) => const CreateTemplateDialog(),
+    );
+
+    if (result == null || !mounted) return;
+
+    final template = await TemplateService.createIngredientTemplate(
+      name: result.name,
+      categoryNames: result.categoryNames,
+    );
 
     if (!mounted) return;
 
-    setState(() {
-      _selectedIngredientTemplate = template.path;
-    });
+    // Re-scan so the freshly created file appears in _templates (and
+    // therefore in "Wczytaj szablon"/"Edytuj szablony"), not just as the
+    // current selection below.
+    await _loadTemplates();
+    if (!mounted) return;
+
+    setState(() => _selectedIngredientTemplate = template.path);
+
+    await SettingsService.saveSelectedTemplates(
+      ingredientTemplatePath: template.path,
+      recipeTemplatePath: _selectedRecipeTemplate,
+    );
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Utworzono nowy szablon składników.')),
+      SnackBar(content: Text('Utworzono nowy zestaw "${template.name}".')),
     );
   }
 
@@ -196,14 +250,6 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
         builder: (context) => TemplateContentScreen(template: selected),
       ),
     );
-  }
-
-  // Turns a full file path into just the trailing filename for display,
-  // and normalizes Windows-style backslashes to forward slashes first so
-  // the split works the same on every platform.
-  String _templateName(String? path) {
-    if (path == null) return 'Nie wybrano';
-    return path.replaceAll('\\', '/').split('/').last;
   }
 
   @override
@@ -244,48 +290,8 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
                   icon: const Icon(Icons.add),
                   label: const Text('Dodaj nowy zestaw'),
                 ),
-                const SizedBox(height: 32),
-
-                // --- Summary of what's currently active -----------------
-                _SelectedTemplateCard(
-                  icon: Icons.liquor_outlined,
-                  title: 'Wybrany szablon składników',
-                  templateName: _templateName(_selectedIngredientTemplate),
-                ),
-                const SizedBox(height: 12),
-                _SelectedTemplateCard(
-                  icon: Icons.menu_book_outlined,
-                  title: 'Wybrany szablon przepisów',
-                  templateName: _templateName(_selectedRecipeTemplate),
-                ),
               ],
             ),
-    );
-  }
-}
-
-// Small, reusable card that just shows an icon + a title + the currently
-// selected template's name. Pulling this into its own widget avoids
-// repeating the same Card/ListTile structure twice in build() above.
-class _SelectedTemplateCard extends StatelessWidget {
-  const _SelectedTemplateCard({
-    required this.icon,
-    required this.title,
-    required this.templateName,
-  });
-
-  final IconData icon;
-  final String title;
-  final String templateName;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(templateName),
-      ),
     );
   }
 }

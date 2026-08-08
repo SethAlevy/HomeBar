@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'route_observer.dart';
 import 'services/auth.dart';
 import 'screens/home.dart';
 
@@ -75,6 +76,13 @@ class HomeBarApp extends StatelessWidget {
       // light/dark setting - we don't have to detect or react to it
       // ourselves.
       themeMode: ThemeMode.system,
+
+      // Lets any screen that mixes in RouteAware (see route_observer.dart)
+      // find out when it becomes visible again after a route pushed on
+      // top of it gets popped - used by HomeScreen to refresh its
+      // selected-templates summary after returning from
+      // ManageHomebarsScreen.
+      navigatorObservers: [appRouteObserver],
 
       // First screen shown after startup - the root of the navigation
       // stack that every Navigator.push() call in the app builds on top
