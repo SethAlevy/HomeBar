@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'category_browser_screen.dart';
+import 'recipe_picker_screen.dart';
+import 'recipes_screen.dart';
 import '../route_observer.dart';
 import '../services/settings_service.dart';
 import '../widgets/app_drawer.dart';
@@ -84,6 +86,24 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
       context,
       MaterialPageRoute(
         builder: (context) => const CategoryBrowserScreen(),
+      ),
+    );
+  }
+
+  void _openRecipes(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RecipesScreen(),
+      ),
+    );
+  }
+
+  void _openRecipePicker(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RecipePickerScreen(),
       ),
     );
   }
@@ -177,19 +197,17 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
                     _MenuButton(
                       icon: Icons.menu_book_outlined,
                       label: 'Przepisy koktajlowe',
-                      onPressed: () => _showComingSoon(context, 'Przepisy koktajlowe'),
+                      onPressed: () => _openRecipes(context),
                     ),
                     _MenuButton(
                       icon: Icons.liquor_outlined,
                       label: 'Wszystkie składniki',
-                      // The only button that's actually wired up to a real
-                      // screen today - the rest are placeholders.
                       onPressed: () => _openCategoryBrowser(context),
                     ),
                     _MenuButton(
                       icon: Icons.help_outline,
                       label: 'Pomóż mi wybrać',
-                      onPressed: () => _showComingSoon(context, 'Pomóż mi wybrać'),
+                      onPressed: () => _openRecipePicker(context),
                     ),
                   ],
                 ),

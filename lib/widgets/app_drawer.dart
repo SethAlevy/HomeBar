@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../screens/category_browser_screen.dart';
 import '../screens/manage_homebars.dart';
+import '../screens/recipe_picker_screen.dart';
+import '../screens/recipes_screen.dart';
 
 // ============================================================================
 // AppDrawer
@@ -34,6 +36,24 @@ class AppDrawer extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (context) => const CategoryBrowserScreen(),
+      ),
+    );
+  }
+
+  void _openRecipes(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RecipesScreen(),
+      ),
+    );
+  }
+
+  void _openRecipePicker(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const RecipePickerScreen(),
       ),
     );
   }
@@ -106,7 +126,22 @@ class AppDrawer extends StatelessWidget {
             _DrawerMenuItem(
               icon: Icons.menu_book_outlined,
               label: 'Przepisy',
-              onTap: () => _showComingSoon(context, 'Przepisy'),
+              onTap: () {
+                // Close the drawer, then navigate - same reasoning as
+                // _openManageHomebars() below.
+                Navigator.pop(context);
+                _openRecipes(context);
+              },
+            ),
+            _DrawerMenuItem(
+              icon: Icons.help_outline,
+              label: 'Pomóż mi wybrać',
+              onTap: () {
+                // Close the drawer, then navigate - same reasoning as
+                // _openManageHomebars() below.
+                Navigator.pop(context);
+                _openRecipePicker(context);
+              },
             ),
 
             // Divider visually separates "browse content" items above

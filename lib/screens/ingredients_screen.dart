@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/ingredient.dart';
 import '../models/category.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/search_field.dart';
+import '../widgets/tag_filter_panel.dart';
 import '../widgets/top_nav_tiles.dart';
 
 // ============================================================================
@@ -177,8 +179,12 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
             child: Column(
               children: [
                 const TopNavTiles(),
-                _SearchField(onChanged: _onSearchChanged),
-                _TagFilterPanel(
+                SearchField(
+                  hintText: 'Szukaj po nazwie, producencie lub opisie',
+                  onChanged: _onSearchChanged,
+                ),
+                TagFilterPanel(
+                  title: 'Filtruj po tagach',
                   allTags: _allTags,
                   selectedTags: _selectedTags,
                   onToggleTag: _toggleTag,
@@ -224,143 +230,6 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-// The inline search field shown just below the back/home buttons. Owns its
-// own TextEditingController (purely so it can show/hide a clear button as
-// text is typed) and reports every change up to the parent via onChanged,
-// which is what actually drives filtering.
-class _SearchField extends StatefulWidget {
-  final ValueChanged<String> onChanged;
-
-  const _SearchField({required this.onChanged});
-
-  @override
-  State<_SearchField> createState() => _SearchFieldState();
-}
-
-class _SearchFieldState extends State<_SearchField> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _clear() {
-    _controller.clear();
-    widget.onChanged('');
-    // Only needed to hide the clear button itself - the actual filtering
-    // update already happened via widget.onChanged above.
-    setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: TextField(
-        controller: _controller,
-        onChanged: (value) {
-          widget.onChanged(value);
-          // Only needed so the clear button appears/disappears as text is
-          // typed/removed - filtering itself already happened above.
-          setState(() {});
-        },
-        decoration: InputDecoration(
-          hintText: 'Szukaj po nazwie, producencie lub opisie',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _controller.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'Wyczyść',
-                  onPressed: _clear,
-                ),
-          isDense: true,
-          filled: true,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// The collapsible tag filter panel shown below the search field. Collapsed
-// by default (initiallyExpanded: false) so it stays out of the way until
-// the user actually wants to filter by tag.
-class _TagFilterPanel extends StatelessWidget {
-  final List<String> allTags;
-  final Set<String> selectedTags;
-  final ValueChanged<String> onToggleTag;
-  final VoidCallback onToggleSelectAll;
-
-  const _TagFilterPanel({
-    required this.allTags,
-    required this.selectedTags,
-    required this.onToggleTag,
-    required this.onToggleSelectAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Nothing to filter by - don't show an empty, pointless panel.
-    if (allTags.isEmpty) return const SizedBox.shrink();
-
-    final allSelected = selectedTags.length == allTags.length;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Theme(
-        // Removes the faint divider ExpansionTile normally draws above and
-        // below itself - purely cosmetic, keeps this compact panel tidy.
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: false,
-          tilePadding: EdgeInsets.zero,
-          // "Everything selected" is the neutral/default state now, so it
-          // gets the plain title; any other count (including 0, meaning
-          // the list is showing nothing) is worth calling out.
-          title: Text(
-            allSelected
-                ? 'Filtruj po tagach'
-                : 'Filtruj po tagach (${selectedTags.length})',
-          ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  // FilterChip already has built-in "selected" styling and
-                  // an onSelected callback, so it doubles as a tap-to-
-                  // toggle control - no separate Checkbox/Switch needed for
-                  // either this or the tag chips below.
-                  FilterChip(
-                    label: const Text('Zaznacz wszystko'),
-                    selected: allSelected,
-                    onSelected: (_) => onToggleSelectAll(),
-                  ),
-                  ...allTags.map(
-                    (tag) => FilterChip(
-                      label: Text(tag),
-                      selected: selectedTags.contains(tag),
-                      onSelected: (_) => onToggleTag(tag),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

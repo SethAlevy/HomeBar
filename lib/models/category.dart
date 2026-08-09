@@ -97,4 +97,44 @@ class Category {
         subcategories: subcategories ?? this.subcategories,
         ingredients: ingredients ?? this.ingredients,
       );
+
+  // Whether this category (or any descendant subcategory) has at least one
+  // ingredient in stock - used by collectAvailableMatchKeys() below to
+  // decide whether the category's own name counts as "available".
+  bool get hasStock =>
+      ingredients.any((i) => i.bottlesCount > 0) || subcategories.any((c) => c.hasStock);
+}
+
+// Builds the set of "match keys" that currently have stock behind them, from
+// a whole category tree: every ingredient name backed by at least one
+// bottle, plus every category/subcategory name that has such an ingredient
+// anywhere underneath it. Names are normalized (trimmed, lowercased) so
+// lookups can compare case-insensitively.
+//
+// This is what lets Recipe.isAvailable() treat a recipe ingredient line
+// loosely - RecipeIngredient.matchKey might name a specific bottle
+// ("Aperol") or a whole category ("Whisky"), and either way it only needs
+// one matching bottle in stock to count.
+Set<String> collectAvailableMatchKeys(List<Category> categories) {
+  final keys = <String>{};
+
+  void visit(Category category) {
+    for (final subcategory in category.subcategories) {
+      visit(subcategory);
+    }
+    for (final ingredient in category.ingredients) {
+      if (ingredient.bottlesCount > 0) {
+        keys.add(ingredient.name.trim().toLowerCase());
+      }
+    }
+    if (category.hasStock) {
+      keys.add(category.name.trim().toLowerCase());
+    }
+  }
+
+  for (final category in categories) {
+    visit(category);
+  }
+
+  return keys;
 }

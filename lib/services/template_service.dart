@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:yaml/yaml.dart' as yaml;
 
 import '../models/category.dart';
+import '../models/recipe.dart';
 import 'settings_service.dart';
 
 // Which "kind" of template a TemplateFile is - used to sort bundled files
@@ -33,12 +34,13 @@ class TemplateFile {
 // ----------------------------------------------------------------------------
 // Reads (and writes) the template YAML files that back both the "Zarządzaj
 // zestawami" (manage homebars) screens AND, via
-// resolveActiveIngredientTemplate(), the user's actual live inventory -
-// there's no separate "inventory" storage anymore, it's simply whichever
-// ingredient template is currently selected (or the bundled default, if
-// none has been). Templates are parsed into the same Category/Ingredient
-// models used everywhere else in the app (see lib/models/), so any editing
-// logic only has to exist once.
+// resolveActiveIngredientTemplate()/resolveActiveRecipeTemplate(), the
+// user's actual live inventory and recipe list - there's no separate
+// storage for either one, it's simply whichever template is currently
+// selected (or the bundled default, if none has been). Templates are
+// parsed into the same Category/Ingredient/Recipe models used everywhere
+// else in the app (see lib/models/), so any editing logic only has to
+// exist once.
 //
 // Every template ultimately lives as a real file in one of two places:
 //   - Bundled under assets/data/ - ships inside the app package, read-only
@@ -68,6 +70,15 @@ class TemplateService {
     type: TemplateType.ingredient,
   );
 
+  // The recipe template used when nothing has been explicitly selected yet
+  // (see resolveActiveRecipeTemplate) - the same bundled file the app has
+  // always shipped with.
+  static const defaultRecipeTemplate = TemplateFile(
+    path: 'assets/data/recipe/recipe.yaml',
+    name: 'Szablon przepisów',
+    type: TemplateType.recipe,
+  );
+
   // Figures out which ingredient template is "active" right now - i.e.
   // which one screens like CategoryBrowserScreen should load and save
   // against. That's whichever template is selected in "Zarządzaj
@@ -89,6 +100,23 @@ class TemplateService {
     return templates.firstWhere(
       (t) => t.type == TemplateType.ingredient && t.path == selectedPath,
       orElse: () => defaultIngredientTemplate,
+    );
+  }
+
+  // Same idea as resolveActiveIngredientTemplate(), for recipes: whichever
+  // recipe template is selected in "Zarządzaj zestawami", or
+  // defaultRecipeTemplate if none has been (or the selected one can no
+  // longer be found). No legacy migration needed here - recipes never had
+  // an older, separate storage location the way ingredients did.
+  static Future<TemplateFile> resolveActiveRecipeTemplate() async {
+    final settings = await SettingsService.load();
+    final selectedPath = settings.selectedRecipeTemplatePath;
+    if (selectedPath == null) return defaultRecipeTemplate;
+
+    final templates = await loadBundledTemplates();
+    return templates.firstWhere(
+      (t) => t.type == TemplateType.recipe && t.path == selectedPath,
+      orElse: () => defaultRecipeTemplate,
     );
   }
 
@@ -257,6 +285,45 @@ class TemplateService {
         .whereType<Map>()
         .map((item) => Category.fromYaml(Map<String, dynamic>.from(item)))
         .toList();
+  }
+
+  // Loads a recipe template's content as a flat list of Recipe. Same
+  // writable-copy-first, bundled-asset-fallback rule as
+  // loadTemplateCategories() above, just parsing the `cocktails:` list
+  // instead of `categories:`.
+  static Future<List<Recipe>> loadRecipes(TemplateFile template) async {
+    final editableCopy = await _editableCopyFor(template);
+
+    final content = await editableCopy.exists()
+        ? await editableCopy.readAsString()
+        : await _loadOptionalText(template.path);
+
+    if (content == null || content.trim().isEmpty) {
+      return [];
+    }
+
+    final data = yaml.loadYaml(content);
+    if (data is! Map || data['cocktails'] is! List) {
+      // Missing or malformed data - fail soft with an empty list instead
+      // of throwing, so the screen can show a "no content" message.
+      return [];
+    }
+
+    return (data['cocktails'] as List)
+        .whereType<Map>()
+        .map((item) => Recipe.fromYaml(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  // The set of "match keys" (see RecipeIngredient.matchKey) currently
+  // backed by stock in the active ingredient template - i.e. every
+  // ingredient and category/subcategory name with at least one bottle
+  // behind it. Used by RecipesScreen and RecipePickerScreen to only show
+  // recipes that can actually be prepared right now.
+  static Future<Set<String>> loadAvailableMatchKeys() async {
+    final template = await resolveActiveIngredientTemplate();
+    final categories = await loadTemplateCategories(template);
+    return collectAvailableMatchKeys(categories);
   }
 
   // Persists edits to a template by writing its writable copy, creating
