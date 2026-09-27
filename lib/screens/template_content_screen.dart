@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/category.dart';
 import '../models/ingredient.dart';
+import '../models/recipe.dart';
 import '../services/template_service.dart';
 import '../widgets/add_template_node_dialog.dart';
 import '../widgets/edit_template_ingredient_dialog.dart';
@@ -10,14 +11,18 @@ import '../widgets/edit_template_ingredient_dialog.dart';
 // TemplateContentScreen
 // ----------------------------------------------------------------------------
 // Full-screen viewer AND editor for one template file (picked in
-// ManageHomebarsScreen). Loads the file's Category tree and renders it as
-// a fully expanded tree: categories as collapsible, color-coded group
-// tiles (color darkens with nesting depth - see _categoryPalette), and
-// ingredients as detail cards in a single fixed color (see
-// _ingredientPalette) showing every field.
+// ManageHomebarsScreen) - branches on widget.template.type into two
+// completely different views:
+//   - Ingredient templates load a Category tree and render it as a fully
+//     expanded tree: categories as collapsible, color-coded group tiles
+//     (color darkens with nesting depth - see _categoryPalette), and
+//     ingredients as detail cards in a single fixed color (see
+//     _ingredientPalette) showing every field.
+//   - Recipe templates load a flat List<Recipe> and render it as a list of
+//     RecipeCard tiles with edit/delete buttons. Editing isn't built yet
+//     (see _editRecipe) - only deleting is, for now.
 //
-// Every edit (rename/delete a category, edit/delete/add an ingredient, add
-// a category) only changes the in-memory tree and marks it dirty - nothing
+// Every edit only changes the in-memory data and marks it dirty - nothing
 // is written to disk until the bottom bar's "Zapisz" button is tapped (see
 // _save). That button is disabled whenever there's nothing unsaved.
 // ============================================================================
@@ -31,12 +36,17 @@ class TemplateContentScreen extends StatefulWidget {
 }
 
 class _TemplateContentScreenState extends State<TemplateContentScreen> {
+  // Only one of _categories/_recipes is ever populated, depending on
+  // widget.template.type - see _isRecipeTemplate.
   List<Category> _categories = [];
+  List<Recipe> _recipes = [];
   bool _isLoading = true;
 
-  // True whenever _categories has changes that haven't been written to
-  // disk yet - drives whether the bottom bar's Save button is enabled.
+  // True whenever the in-memory data has changes that haven't been written
+  // to disk yet - drives whether the bottom bar's Save button is enabled.
   bool _isDirty = false;
+
+  bool get _isRecipeTemplate => widget.template.type == TemplateType.recipe;
 
   @override
   void initState() {
@@ -45,6 +55,16 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
   }
 
   Future<void> _load() async {
+    if (_isRecipeTemplate) {
+      final recipes = await TemplateService.loadRecipes(widget.template);
+      if (!mounted) return;
+      setState(() {
+        _recipes = recipes;
+        _isLoading = false;
+      });
+      return;
+    }
+
     final categories = await TemplateService.loadTemplateCategories(widget.template);
 
     if (!mounted) return;
@@ -55,16 +75,42 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
     });
   }
 
-  // Writes the current in-memory tree out to the template's writable copy
+  // Writes the current in-memory data out to the template's writable copy
   // and clears the dirty flag. Only ever called explicitly from the "Zapisz"
-  // button - every edit method below only touches _categories in memory.
+  // button - every edit method below only touches _categories/_recipes in
+  // memory.
   Future<void> _save() async {
-    await TemplateService.saveTemplateCategories(widget.template, _categories);
+    if (_isRecipeTemplate) {
+      await TemplateService.saveTemplateRecipes(widget.template, _recipes);
+    } else {
+      await TemplateService.saveTemplateCategories(widget.template, _categories);
+    }
 
     if (!mounted) return;
     setState(() => _isDirty = false);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Zapisano zmiany.')),
+    );
+  }
+
+  // ---- Recipe actions --------------------------------------------------
+
+  Future<void> _deleteRecipe(Recipe target) async {
+    final confirmed = await _confirmDelete(context, 'Usunąć przepis "${target.name}"?');
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _recipes = _recipes.where((r) => !identical(r, target)).toList();
+      _isDirty = true;
+    });
+  }
+
+  // Recipe editing isn't built yet - same "coming soon" convention used
+  // elsewhere in the app (see HomeScreen/AppDrawer) for destinations that
+  // don't exist yet.
+  void _editRecipe(Recipe target) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Edycja przepisów — wkrótce!')),
     );
   }
 
@@ -166,6 +212,48 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
     });
   }
 
+  Widget _buildRecipeList() {
+    if (_recipes.isEmpty) {
+      return const Center(child: Text('Brak zawartości szablonu.'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(8),
+      itemCount: _recipes.length,
+      itemBuilder: (context, index) {
+        final recipe = _recipes[index];
+        return _RecipeEditorTile(
+          recipe: recipe,
+          onEdit: () => _editRecipe(recipe),
+          onDelete: () => _deleteRecipe(recipe),
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryTree() {
+    if (_categories.isEmpty) {
+      return const Center(child: Text('Brak zawartości szablonu.'));
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      // depth: 0 because these are the top-level categories; each nested
+      // level below increases depth by one (see _CategoryTile below),
+      // which drives both indentation and how dark the tile's color is.
+      children: _categories
+          .map(
+            (category) => _CategoryTile(
+              category: category,
+              depth: 0,
+              onRenameCategory: _renameCategory,
+              onDeleteCategory: _deleteCategory,
+              onEditIngredient: _editIngredient,
+              onDeleteIngredient: _deleteIngredient,
+            ),
+          )
+          .toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -174,36 +262,22 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _categories.isEmpty
-              ? const Center(child: Text('Brak zawartości szablonu.'))
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  // depth: 0 because these are the top-level categories;
-                  // each nested level below increases depth by one (see
-                  // _CategoryTile below), which drives both indentation
-                  // and how dark the tile's color is.
-                  children: _categories
-                      .map(
-                        (category) => _CategoryTile(
-                          category: category,
-                          depth: 0,
-                          onRenameCategory: _renameCategory,
-                          onDeleteCategory: _deleteCategory,
-                          onEditIngredient: _editIngredient,
-                          onDeleteIngredient: _deleteIngredient,
-                        ),
-                      )
-                      .toList(),
-                ),
+          : _isRecipeTemplate
+              ? _buildRecipeList()
+              : _buildCategoryTree(),
       bottomNavigationBar: BottomAppBar(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _BottomBarAction(
-              icon: Icons.add,
-              label: 'Dodaj',
-              onPressed: _isLoading ? null : _addNode,
-            ),
+            // Adding new recipes isn't built yet (see _editRecipe), so
+            // there's nothing for this button to do for a recipe template
+            // - only "Zapisz" (for recipe deletions) is offered there.
+            if (!_isRecipeTemplate)
+              _BottomBarAction(
+                icon: Icons.add,
+                label: 'Dodaj',
+                onPressed: _isLoading ? null : _addNode,
+              ),
             _BottomBarAction(
               icon: Icons.save_outlined,
               label: 'Zapisz',
@@ -794,6 +868,167 @@ class _IngredientCard extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// _RecipeEditorTile
+// ----------------------------------------------------------------------------
+// A deliberately more "raw"/developer-facing rendering of a Recipe than the
+// polished RecipeCard used by RecipesScreen/RecipePickerScreen: every
+// section is labeled with its literal YAML key (ingredients/instructions/
+// comments/tags), every ingredient line shows its resolved matchKey (see
+// RecipeIngredient.matchKey and Recipe.isAvailable) so it's obvious at a
+// glance whether one was set explicitly or is just defaulting to the
+// ingredient's own name, and the comments section always renders - even
+// empty - instead of disappearing. That's useful here specifically because
+// this screen IS the tool for authoring/correcting that raw YAML data.
+// ============================================================================
+class _RecipeEditorTile extends StatelessWidget {
+  final Recipe recipe;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _RecipeEditorTile({
+    required this.recipe,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  // A small, bold, monospace label naming the literal YAML key a section
+  // below it corresponds to - e.g. "ingredients:" - so it's unambiguous
+  // which raw field is being edited.
+  Widget _keyLabel(BuildContext context, String key) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Text(
+          '$key:',
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      );
+
+  Widget _divider() => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 10),
+        child: Divider(height: 1),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Card(
+      margin: const EdgeInsets.all(8.0),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    recipe.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Edytuj przepis',
+                  onPressed: onEdit,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Usuń przepis',
+                  color: Theme.of(context).colorScheme.error,
+                  onPressed: onDelete,
+                ),
+              ],
+            ),
+            if (recipe.ingredients.isNotEmpty) ...[
+              _divider(),
+              _keyLabel(context, 'ingredients'),
+              for (final ingredient in recipe.ingredients)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: Text(ingredient.name)),
+                          Text(ingredient.amount, style: Theme.of(context).textTheme.bodyMedium),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          // A custom matchKey (one that doesn't just equal
+                          // the ingredient's own name) is the exception,
+                          // not the rule, so it gets its own icon to make
+                          // it stand out from the common "defaulted to
+                          // name" case.
+                          Icon(
+                            ingredient.matchKey.trim().toLowerCase() ==
+                                    ingredient.name.trim().toLowerCase()
+                                ? Icons.vpn_key_off_outlined
+                                : Icons.vpn_key_outlined,
+                            size: 13,
+                            color: mutedColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'matchKey: ${ingredient.matchKey}',
+                            style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: mutedColor),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            if (recipe.instructionSteps.isNotEmpty) ...[
+              _divider(),
+              _keyLabel(context, 'instructions'),
+              for (var i = 0; i < recipe.instructionSteps.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('${i + 1}. ${recipe.instructionSteps[i]}'),
+                ),
+            ],
+            // Unlike RecipeCard, this section always renders - an empty
+            // `comments:` is itself something worth seeing while editing,
+            // rather than being indistinguishable from the field not
+            // existing at all.
+            _divider(),
+            _keyLabel(context, 'comments'),
+            Text(
+              recipe.comments.isEmpty ? '(puste)' : recipe.comments,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: recipe.comments.isEmpty ? mutedColor : null,
+                  ),
+            ),
+            if (recipe.tags.isNotEmpty) ...[
+              _divider(),
+              _keyLabel(context, 'tags'),
+              Wrap(
+                spacing: 4.0,
+                children: recipe.tags
+                    .map((tag) => Chip(
+                          label: Text(tag),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ))
+                    .toList(),
+              ),
+            ],
+          ],
         ),
       ),
     );

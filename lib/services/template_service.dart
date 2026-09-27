@@ -315,6 +315,24 @@ class TemplateService {
         .toList();
   }
 
+  // Persists edits to a recipe template - the flat-list counterpart to
+  // saveTemplateCategories() above, writing `cocktails:` instead of
+  // `categories:`. Same rules apply: writes only the writable copy, never
+  // the bundled asset, and always stamps `template_name`.
+  static Future<void> saveTemplateRecipes(
+    TemplateFile template,
+    List<Recipe> recipes,
+  ) async {
+    final file = await _editableCopyFor(template);
+    await file.parent.create(recursive: true);
+
+    final data = {
+      'template_name': template.name,
+      'cocktails': recipes.map((e) => e.toYaml()).toList(),
+    };
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
+  }
+
   // The set of "match keys" (see RecipeIngredient.matchKey) currently
   // backed by stock in the active ingredient template - i.e. every
   // ingredient and category/subcategory name with at least one bottle

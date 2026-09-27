@@ -3,27 +3,46 @@ categories:
     subcategories:
       - name: "Mocne"
         subcategories:
-          - name: "Rum Jasny"
-            ingredients:
-              - name: "Bacardi Jasny"
-                producer: "Bacardi"
-                description: "Biały rum, styl hiszpański, lekki, 40%"
-                bottles_count: 2
-                tags: ["rum", "karaibski", "lekki", "baza"]
-          - name: "Scotch Blended Whiskey"
-            ingredients:
-              - name: "Johnnie Walker Red Label"
-                producer: "Diageo"
-                description: "Szkocka whisky mieszana"
-                bottles_count: 1
-                tags: ["scotch", "blended", "baza"]
-          - name: "Scotch Blended Whiskey"
-            ingredients:
-              - name: "Famous Grouse"
-                producer: "The Famous Grouse Ltd"
-                description: "Szkocka whisky mieszana"
-                bottles_count: 1
-                tags: ["scotch", "blended", "baza"]
+          - name: "Rum"
+            subcategories:
+              - name: "Biały"
+                ingredients:
+                  - name: "Bacardi Jasny"
+                    producer: "Bacardi"
+                    description: "Biały rum, styl hiszpański, lekki, 40%"
+                    bottles_count: 2
+                    tags: ["rum", "karaibski", "lekki", "baza"]
+              - name: "Ciemny"
+                ingredients:
+                  - name: "Bacardi Czarny"
+                    producer: "Bacardi"
+                    description: "Ciemny rum, styl hiszpański, mocny, 40%"
+                    bottles_count: 1
+                    tags: ["rum", "karaibski", "mocny", "baza"]
+          - name: "Whisky"
+            subcategories:
+              - name: "Szkocka"
+                ingredients:
+                  - name: "Johnnie Walker Black Label"
+                    producer: "Diageo"
+                    description: "Szkocka whisky mieszana, 40%"
+                    bottles_count: 1
+                    tags: ["whisky", "szkocka", "mieszana", "baza"]
+              - name: "Irlandzka"
+                ingredients:
+                  - name: "Jameson"
+                    producer: "Pernod Ricard"
+                    description: "Irlandzka whisky, 40%"
+                    bottles_count: 1
+                    tags: ["whisky", "irlandzka", "baza"]
+              - name: "Amerykańska"
+                ingredients:
+                  - name: "Jack Daniel's"
+                    producer: "Brown-Forman"
+                    description: "Tennessee whiskey, 40%"
+                    bottles_count: 1
+                    tags: ["whisky", "amerykańska", "baza"]
+      
       - name: "Likiery"
         subcategories:
           - name: "Słodkie"
@@ -45,6 +64,37 @@ categories:
                 description: "Ziołowy likier niemiecki, 35%"
                 bottles_count: 1
                 tags: ["ziołowy", "likier", "gorzki", "baza", "dodatek"]
+      - name: "Aperitify"
+        subcategories:
+          - name: "Wermut"
+            ingredients:
+              - name: "Martini Bianco"
+                producer: "Martini & Rossi"
+                description: "Wermut włoski, słodki, aromatyzowany ziołami i przyprawami."
+                bottles_count: 1
+                tags: ["wermut", "słodki", "baza", "dodatek"]
+              - name: "Martini Rosso"
+                producer: "Martini & Rossi"
+                description: "Wermut włoski, słodki, aromatyzowany ziołami i przyprawami."
+                bottles_count: 1
+                tags: ["wermut", "słodki", "baza", "dodatek"]
+              - name: "Martini Fiero"
+                producer: "Martini & Rossi"
+                description: "Wermut włoski, słodko-gorzki, aromatyzowany ziołami i przyprawami."
+                bottles_count: 1
+                tags: ["wermut", "słodko-gorzki", "baza", "dodatek"]
+          - name: "Aperitify"
+            ingredients:
+              - name: "Campari"
+                producer: "Campari Group"
+                description: "Włoski aperitif, gorzko-słodki, aromatyzowany ziołami i przyprawami."
+                bottles_count: 1
+                tags: ["aperitif", "gorzki", "baza", "dodatek"]
+              - name: "Aperol"
+                producer: "Campari Group"
+                description: "Włoski aperitif, gorzko-słodki, aromatyzowany ziołami i przyprawami."
+                bottles_count: 1
+                tags: ["aperitif", "gorzko-słodki", "baza", "dodatek"]
       - name: "Nalewki"
         ingredients:
           - name: "Wiśniak"
@@ -62,10 +112,20 @@ categories:
       - name: "Soki"
         subcategories: []
         ingredients:
-          - name: "Pomarańczowy"
+          - name: "Sok Pomarańczowy"
             producer: ""
             description: ""
             bottles_count: 3
+            tags: ["cytrus", "sok"]
+          - name: "Sok z Cytryny"
+            producer: ""
+            description: ""
+            bottles_count: 2
+            tags: ["cytrus", "sok"]
+          - name: "Sok z Limonki"
+            producer: ""
+            description: ""
+            bottles_count: 2
             tags: ["cytrus", "sok"]
       - name: "Napoje gazowane"
         ingredients:
@@ -74,9 +134,14 @@ categories:
             description: "Klasyczna cola"
             bottles_count: 5
             tags: ["słodki", "gazowany"]
+          - name: "Woda gazowana"
+            producer: ""
+            description: "Woda gazowana, bez dodatków"
+            bottles_count: 4
+            tags: ["gazowany"]
       - name: "Syropy"
         ingredients:
-          - name: "Syrop cukrowy ciemny"
+          - name: "Syrop cukrowy"
             producer: "Domowy"
             description: "Syrop, lekko karmelizowany na ciemnym cukrze."
             bottles_count: 2

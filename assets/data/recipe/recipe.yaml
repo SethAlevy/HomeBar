@@ -8,19 +8,112 @@ cocktails:
       1. Umieść wszystkie składniki w shakerze z lodem.
       2. Wstrząśnij energicznie przez kilka sekund.
       3. Przelej do szklanki.
+    comments:
     tags: ["tequila", "margarita", "orzeźwiający", "szejkowany", "klasyczny"]
 
   - name: Whisky Sour
     ingredients:
-      - [Whiskey, 1 porcja]
+      - [Whisky, 1 porcja]
       - [Sok z cytryny, 1/2 porcja]
       - [Syrop cukrowy, 1/4 porcja]
       - [Foamer, 3 kropele]
       - [Angostura Bitters, 1 dash]
     instructions:
-      1. Umieść whiskey, sok z cytryny, syrop cukrowy i foamer w szejkerze.
+      1. Umieść whisky, sok z cytryny, syrop cukrowy i foamer w szejkerze.
       2. Wstrząśnij energicznie bez lodu, aby spienić.
       3. Dodaj lód i wstrząśnij ponownie przez kilka sekund.
-      4. Przelej do szklanki wypełnionej lodem.
+      4. Przelej do szkła z lodem.
       5. Dodaj dash Angostura Bitters.
+    comments:
     tags: ["whiskey", "sour", "szejkowany", "klasyczny"]
+  
+  - name: Aperol Spritz
+    ingredients:
+      - [Aperol, 3 porcji]
+      - [Prosecco, 2 porcji]
+      - [Woda gazowana, 1 porcja]
+      - [Plaster pomarańczy, do dekoracji]
+    instructions:
+      1. Napełnij kieliszek lodem.
+      2. Dodaj Aperol, Prosecco i wodę gazowaną.
+      3. Delikatnie wymieszaj.
+      4. Udekoruj plasterkiem pomarańczy.
+    comments: "Może być robiony w większych ilościach i podawany w dzbanku"
+    tags: ["aperol", "spritz", "budowany", "orzeźwiający", "prosecco", "letni", "dzbanek"]
+
+  - name: Mojito
+    ingredients:
+      - [Rum, 1 porcja]
+      - [Sok z limonki, 1/2 porcja]
+      - [Syrop cukrowy, 1/2 porcja]
+      - [Mięta, kilka listków]
+      - [Woda gazowana, do uzupełnienia]
+    instructions:
+      1. W szklance umieść miętę i sok z limonki.
+      2. Delikatnie rozgnieć miętę, aby uwolnić aromat.
+      3. Dodaj rum i syrop cukrowy.
+      4. Wypełnij szklankę lodem i uzupełnij wodą gazowaną.
+      5. Delikatnie wymieszaj.
+    comments:
+    tags: ["rum", "mojito", "budowany", "orzeźwiający", "mięta", "letni"]
+
+  - name: Daiquiri
+    ingredients:
+      - [Rum, 1 porcja]
+      - [Sok z limonki, 1/2 porcja]
+      - [Syrop cukrowy, 1/4 porcja]
+    instructions:
+      1. Umieść wszystkie składniki w shakerze z lodem.
+      2. Wstrząśnij energicznie przez kilka sekund.
+      3. Przelej do szkła z lodem.
+    comments:
+    tags: ["rum", "daiquiri", "szejkowany", "klasyczny", "lekki"]
+
+  - name: Tom Collins
+    ingredients:
+      - [Gin, 1 porcja]
+      - [Sok z cytryny, 1/2 porcja]
+      - [Syrop cukrowy, 1/2 porcja]
+      - [Woda gazowana, do uzupełnienia]
+      - [Plaster cytryny, do dekoracji]
+    instructions:
+      1. W szklance umieść gin, sok z cytryny i syrop cukrowy.
+      2. Wypełnij szklankę lodem i uzupełnij wodą gazowaną.
+      3. Delikatnie wymieszaj.
+      4. Udekoruj plasterkiem cytryny.
+    comments: "Alkoholowa oranżadka."
+    tags: ["gin", "collins", "orzeźwiający", "letni", "klasyczny"]
+
+  - name: Delicja
+    ingredients:
+      - [Wódka wiśnia w czekoladzie, 1 porcja, wiśnia w czekoladzie]
+      - [Sok pomarańczowy, 1 porcja]
+    instructions:
+      1. Wlej wódkę i sok pomarańczowy do szklanki z lodem.
+      2. Wymieszaj.
+    comments: "W razie braku wódki wiśnia w czekoladzie można użyć wiśniówki i likieru czekoladowego."
+    tags: ["słodki", "budowany", "lekki", "nietypowy"]
+
+  - name: Gimlet
+    ingredients:
+      - [Gin, 1 porcja]
+      - [Sok z limonki, 1/2 porcja]
+      - [Syrop cukrowy, 1/4 porcja]
+    instructions:
+      1. Umieść wszystkie składniki w shakerze z lodem.
+      2. Wstrząśnij energicznie przez kilka sekund.
+      3. Przelej do szkła z lodem.
+    comments:
+    tags: ["gin", "kwaśny", "szejkowany", "klasyczny", "lekki"]
+
+  - name: Pina Colada
+    ingredients:
+      - [Rum, 1 porcja]
+      - [Sok ananasowy, 1 porcja]
+      - [Mleczko kokosowe, 1/2 porcji]
+    instructions:
+      1. Umieść wszystkie składniki w szejkerze z lodem.
+      2. Wstrząśnij energicznie przez kilka sekund.
+      3. Przelej do szklanki z lodem.
+    comments:
+    tags: ["rum", "szejkowany", "słodki", "tropikalny", "ananas"]
