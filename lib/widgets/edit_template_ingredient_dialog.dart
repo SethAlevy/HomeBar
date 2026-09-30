@@ -165,6 +165,7 @@ class _EditTemplateIngredientDialogState extends State<EditTemplateIngredientDia
                 newTagController: _newTagController,
                 onAddTag: _addTag,
                 onRemoveTag: _removeTag,
+                tagSuggestions: collectAllTags(widget.allCategories),
               ),
             ],
           ),

@@ -223,7 +223,7 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
   Future<void> _quickAddAt(Category category) async {
     final result = await showDialog<AddTemplateNodeResult>(
       context: context,
-      builder: (context) => AddTemplateNodeDialog(destination: category),
+      builder: (context) => AddTemplateNodeDialog(destination: category, allCategories: _categories),
     );
 
     if (result == null || !mounted) return;
@@ -304,39 +304,55 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.template.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _isRecipeTemplate
-              ? _buildRecipeList()
-              : _buildCategoryTree(),
-      bottomNavigationBar: BottomAppBar(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            if (!_isRecipeTemplate)
-              IconButton.filled(
-                icon: const Icon(Icons.add),
-                tooltip: 'Dodaj grupę',
-                onPressed: _isLoading ? null : _addTopLevelGroup,
-              ),
-            if (_isRecipeTemplate)
+    // canPop: false while there are unsaved edits means every attempt to
+    // leave this screen (AppBar back arrow, system back gesture, Android
+    // predictive back) is intercepted below instead of leaving immediately.
+    return PopScope(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, result) async {
+        // didPop is true when canPop already let the navigation through
+        // (i.e. there was nothing unsaved) - nothing left to do here.
+        if (didPop) return;
+
+        final shouldLeave = await _confirmLeaveWithoutSaving(context);
+        if (shouldLeave && context.mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.template.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _isRecipeTemplate
+                ? _buildRecipeList()
+                : _buildCategoryTree(),
+        bottomNavigationBar: BottomAppBar(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              if (!_isRecipeTemplate)
+                IconButton.filled(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Dodaj grupę',
+                  onPressed: _isLoading ? null : _addTopLevelGroup,
+                ),
+              if (_isRecipeTemplate)
+                _BottomBarAction(
+                  icon: Icons.add,
+                  label: 'Dodaj przepis',
+                  onPressed: _isLoading ? null : _addRecipe,
+                ),
               _BottomBarAction(
-                icon: Icons.add,
-                label: 'Dodaj przepis',
-                onPressed: _isLoading ? null : _addRecipe,
+                icon: Icons.save_outlined,
+                label: 'Zapisz',
+                // Disabled whenever there's nothing unsaved, so it's never
+                // possible to write an unchanged (or not-yet-loaded) tree.
+                onPressed: _isDirty ? _save : null,
               ),
-            _BottomBarAction(
-              icon: Icons.save_outlined,
-              label: 'Zapisz',
-              // Disabled whenever there's nothing unsaved, so it's never
-              // possible to write an unchanged (or not-yet-loaded) tree.
-              onPressed: _isDirty ? _save : null,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -522,6 +538,33 @@ Future<bool> _confirmDelete(BuildContext context, String message) async {
   );
   // showDialog returns null if dismissed (e.g. tapping outside it) -
   // treat that the same as an explicit "No".
+  return confirmed ?? false;
+}
+
+// Asked when the user tries to leave this screen (back button/gesture)
+// while there are unsaved edits - see the PopScope in build() below. Same
+// "Tak/Nie"-style shape as _confirmDelete above, just worded for this case.
+Future<bool> _confirmLeaveWithoutSaving(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Niezapisane zmiany'),
+      content: const Text(
+        'Masz niezapisane zmiany. Czy na pewno chcesz wyjść bez zapisywania?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Anuluj'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Wyjdź bez zapisywania'),
+        ),
+      ],
+    ),
+  );
   return confirmed ?? false;
 }
 

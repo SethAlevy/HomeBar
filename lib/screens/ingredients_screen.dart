@@ -75,16 +75,7 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
   void initState() {
     super.initState();
 
-    // Using a Set<String> while collecting automatically de-duplicates
-    // repeated tags; sort() afterwards is what gives the filter panel its
-    // alphabetical order.
-    final tags = <String>{};
-    for (final category in widget.allCategories) {
-      for (final ingredient in category.allIngredients) {
-        tags.addAll(ingredient.tags);
-      }
-    }
-    _allTags = tags.toList()..sort();
+    _allTags = collectAllTags(widget.allCategories);
 
     // Start in "select all" mode, so every (tagged) ingredient is shown by
     // default - computed the same way _filterIngredients() would, via

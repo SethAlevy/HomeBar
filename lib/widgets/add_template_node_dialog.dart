@@ -47,7 +47,17 @@ class AddTemplateNodeResult {
 class AddTemplateNodeDialog extends StatefulWidget {
   final Category destination;
 
-  const AddTemplateNodeDialog({required this.destination, super.key});
+  // The whole template's category tree, used only to collect existing tags
+  // for the tag field's autocomplete/typo-suggestion UI (see
+  // IngredientFieldsSection) - not for picking a destination, which is
+  // fixed to `destination` above.
+  final List<Category> allCategories;
+
+  const AddTemplateNodeDialog({
+    required this.destination,
+    required this.allCategories,
+    super.key,
+  });
 
   @override
   State<AddTemplateNodeDialog> createState() => _AddTemplateNodeDialogState();
@@ -63,6 +73,12 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
   int _bottlesCount = 0;
   List<String> _tags = [];
 
+  // Tags guessed from sibling ingredients already in `widget.destination` -
+  // see suggestTagsForNewIngredient(). Computed once when the dialog opens;
+  // accepting or rejecting one just removes it from this list (accepting
+  // also adds it to _tags - see _acceptSuggestedTag below).
+  late List<String> _suggestedTags;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +89,7 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
     // enabled/disabled state (see _canSave) stays in sync with whether a
     // name has actually been entered yet.
     _nameController = TextEditingController()..addListener(() => setState(() {}));
+    _suggestedTags = suggestTagsForNewIngredient(widget.destination);
   }
 
   @override
@@ -104,6 +121,21 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
 
   void _removeTag(String tag) {
     setState(() => _tags = _tags.where((t) => t != tag).toList());
+  }
+
+  // A suggested tag being accepted means "yes, use it" - it moves from the
+  // suggested row into the real tag list, reusing _addTag so it still goes
+  // through the normal empty/duplicate checks.
+  void _acceptSuggestedTag(String tag) {
+    setState(() => _suggestedTags = _suggestedTags.where((t) => t != tag).toList());
+    _newTagController.text = tag;
+    _addTag();
+  }
+
+  // Rejecting a suggestion just removes it from the suggested row - it was
+  // never a real tag, so there's nothing else to undo.
+  void _rejectSuggestedTag(String tag) {
+    setState(() => _suggestedTags = _suggestedTags.where((t) => t != tag).toList());
   }
 
   void _save() {
@@ -182,6 +214,10 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
                   newTagController: _newTagController,
                   onAddTag: _addTag,
                   onRemoveTag: _removeTag,
+                  tagSuggestions: collectAllTags(widget.allCategories),
+                  suggestedTags: _suggestedTags,
+                  onAcceptSuggestedTag: _acceptSuggestedTag,
+                  onRejectSuggestedTag: _rejectSuggestedTag,
                 ),
               ],
             ],

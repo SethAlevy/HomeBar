@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'editable_chip_list.dart';
+import 'suggested_tags_row.dart';
 
 // ============================================================================
 // IngredientFieldsSection
@@ -26,6 +27,21 @@ class IngredientFieldsSection extends StatelessWidget {
   final VoidCallback onAddTag;
   final ValueChanged<String> onRemoveTag;
 
+  // Every tag already in use elsewhere (e.g. across all ingredients in the
+  // current template), feeding the tag field's autocomplete/typo-suggestion
+  // UI - see EditableChipList. Defaults to empty, which just means no
+  // suggestions are offered.
+  final List<String> tagSuggestions;
+
+  // Tags the app has *guessed* might fit this ingredient (see
+  // suggestTagsForNewIngredient() in lib/models/category.dart), shown above
+  // the real tag list until the user accepts or rejects each one - see
+  // SuggestedTagsRow. Defaults to empty, which hides that row entirely (this
+  // is only wired up for the "add new ingredient" flow, not editing).
+  final List<String> suggestedTags;
+  final ValueChanged<String>? onAcceptSuggestedTag;
+  final ValueChanged<String>? onRejectSuggestedTag;
+
   const IngredientFieldsSection({
     required this.producerController,
     required this.descriptionController,
@@ -36,6 +52,10 @@ class IngredientFieldsSection extends StatelessWidget {
     required this.newTagController,
     required this.onAddTag,
     required this.onRemoveTag,
+    this.tagSuggestions = const [],
+    this.suggestedTags = const [],
+    this.onAcceptSuggestedTag,
+    this.onRejectSuggestedTag,
     super.key,
   });
 
@@ -84,6 +104,19 @@ class IngredientFieldsSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
 
+        // Suggested tags sit above the real tag list, and only render at
+        // all once there's something to suggest - see SuggestedTagsRow.
+        if (suggestedTags.isNotEmpty) ...[
+          Text('Sugerowane tagi', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
+          SuggestedTagsRow(
+            suggestions: suggestedTags,
+            onAccept: onAcceptSuggestedTag ?? (_) {},
+            onReject: onRejectSuggestedTag ?? (_) {},
+          ),
+          const SizedBox(height: 12),
+        ],
+
         Text('Tagi', style: Theme.of(context).textTheme.labelLarge),
         const SizedBox(height: 6),
         EditableChipList(
@@ -92,6 +125,7 @@ class IngredientFieldsSection extends StatelessWidget {
           newItemController: newTagController,
           onAdd: onAddTag,
           addFieldLabel: 'Nowy tag',
+          suggestions: tagSuggestions,
         ),
       ],
     );

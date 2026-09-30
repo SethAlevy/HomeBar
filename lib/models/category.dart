@@ -105,6 +105,44 @@ class Category {
       ingredients.any((i) => i.bottlesCount > 0) || subcategories.any((c) => c.hasStock);
 }
 
+// Every tag used anywhere in a category tree, alphabetically sorted with
+// duplicates removed - the source list for tag autocomplete/suggestions
+// wherever an ingredient's tags are edited.
+List<String> collectAllTags(List<Category> categories) {
+  final tags = <String>{};
+  for (final category in categories) {
+    for (final ingredient in category.allIngredients) {
+      tags.addAll(ingredient.tags);
+    }
+  }
+  return tags.toList()..sort();
+}
+
+// Tags likely to fit a brand-new ingredient being added to `destination`,
+// inferred from tags its existing ingredients already carry (including ones
+// in subcategories underneath it) - e.g. if most bottles under
+// "Alkohole/Mocne" are tagged "baza", a new bottle added there will suggest
+// "baza" too. A tag needs to already be used by at least 2 ingredients
+// before it's suggested, so a single bottle's one-off tags don't get
+// parroted back immediately for the very next addition.
+//
+// Returns the suggestions most-common-first, capped at 6 so the UI never has
+// to show an overwhelming wall of suggested chips.
+List<String> suggestTagsForNewIngredient(Category destination) {
+  final tagCounts = <String, int>{};
+  for (final ingredient in destination.allIngredients) {
+    // toSet() first so one ingredient can only ever contribute 1 to a tag's
+    // count, even if (through some data error) it listed the same tag twice.
+    for (final tag in ingredient.tags.toSet()) {
+      tagCounts[tag] = (tagCounts[tag] ?? 0) + 1;
+    }
+  }
+
+  final suggested = tagCounts.entries.where((entry) => entry.value >= 2).toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  return suggested.take(6).map((entry) => entry.key).toList();
+}
+
 // Builds the set of "match keys" that currently have stock behind them, from
 // a whole category tree: every ingredient name backed by at least one
 // bottle, plus every category/subcategory name that has such an ingredient

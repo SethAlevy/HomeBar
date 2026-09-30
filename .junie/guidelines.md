@@ -1,3 +1,5 @@
+<!-- Mirror of AGENTS.md (the source of truth). Keep this file in sync when AGENTS.md changes. -->
+
 # AI Code Assistant Guidelines
 
 This document defines mandatory rules and working protocols for all AI coding assistants working on this repository.
