@@ -13,6 +13,16 @@ import 'settings_service.dart';
 // into the right section of the UI (ingredient pickers vs. recipe pickers).
 enum TemplateType { ingredient, recipe }
 
+// What TemplateService._readUserTemplateMeta figures out about a
+// user-created template file by reading its content - its type (ingredient
+// vs. recipe) and, if it has one, its stamped display name.
+class _UserTemplateMeta {
+  final TemplateType type;
+  final String? name;
+
+  const _UserTemplateMeta({required this.type, required this.name});
+}
+
 // A lightweight reference to a template file: just enough info (path, a
 // human-friendly name, and its type) to show it in a list before the user
 // has chosen to actually open/read it. Reading the full content only
@@ -189,14 +199,12 @@ class TemplateService {
         ..sort((a, b) => a.path.compareTo(b.path));
 
       for (final file in userFiles) {
-        // Every template created through this app today is an ingredient
-        // set - see createIngredientTemplate() below.
-        const type = TemplateType.ingredient;
+        final meta = await _readUserTemplateMeta(file);
         templates.add(
           TemplateFile(
             path: file.path,
-            name: await _displayNameFor(file) ?? _labelFor(file.path, type),
-            type: type,
+            name: meta.name ?? _labelFor(file.path, meta.type),
+            type: meta.type,
           ),
         );
       }
@@ -223,22 +231,26 @@ class TemplateService {
     return '$baseLabel ${suffixMatch.group(1)}';
   }
 
-  // Reads a file's own `template_name` field, if it has one (see
-  // saveTemplateCategories - every save stamps the template's current
-  // display name into the file), so a user-typed name like "Wesele u Ani"
-  // survives being displayed later instead of being reconstructed - badly
-  // - from its filename.
-  static Future<String?> _displayNameFor(File file) async {
+  // Reads a user-created template file's own `template_name` field (if it
+  // has one - see saveTemplateCategories/saveTemplateRecipes, every save
+  // stamps the template's current display name into the file) and figures
+  // out whether it's an ingredient or recipe template from its actual
+  // content (a `cocktails:` list vs. a `categories:` list), rather than
+  // assuming - unlike bundled templates, a user-created one could now be
+  // either kind (see createIngredientTemplate/createRecipeTemplate).
+  static Future<_UserTemplateMeta> _readUserTemplateMeta(File file) async {
     try {
       final content = await file.readAsString();
       final data = yaml.loadYaml(content);
-      if (data is Map && data['template_name'] is String) {
-        return data['template_name'] as String;
+      if (data is Map) {
+        final type = data['cocktails'] is List ? TemplateType.recipe : TemplateType.ingredient;
+        final name = data['template_name'] is String ? data['template_name'] as String : null;
+        return _UserTemplateMeta(type: type, name: name);
       }
     } catch (_) {
-      // Fall through to null - the caller falls back to _labelFor().
+      // Fall through to the ingredient-typed, name-less default below.
     }
-    return null;
+    return const _UserTemplateMeta(type: TemplateType.ingredient, name: null);
   }
 
   // The folder (inside the app's documents directory) that holds both
@@ -403,6 +415,24 @@ class TemplateService {
     // shape (including the `template_name` field) every other write to a
     // template produces.
     await saveTemplateCategories(template, categories);
+
+    return template;
+  }
+
+  // Creates a brand-new, empty recipe template from scratch - the recipe
+  // counterpart to createIngredientTemplate() above. Just a name; recipes
+  // get added afterwards through the normal template editor.
+  static Future<TemplateFile> createRecipeTemplate({required String name}) async {
+    final directory = await _templatesDirectory();
+    await directory.create(recursive: true);
+
+    final file = await _uniqueFileFor(directory, name);
+    final template = TemplateFile(path: file.path, name: name, type: TemplateType.recipe);
+
+    // Reuses the normal save path, so this new file ends up in exactly the
+    // shape (including the `template_name` field) every other write to a
+    // template produces.
+    await saveTemplateRecipes(template, const []);
 
     return template;
   }

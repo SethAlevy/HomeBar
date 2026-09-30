@@ -21,7 +21,7 @@ class AppDrawer extends StatelessWidget {
   // silently.
   void _showComingSoon(BuildContext context, String label) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label — coming soon!')),
+      SnackBar(content: Text('$label — wkrótce!')),
     );
   }
 

@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
 
 import '../models/category.dart';
-import 'category_path_picker.dart';
 import 'ingredient_fields_section.dart';
 
-// Whether the user is adding a new category (which becomes a subcategory
-// if a destination is picked, or a new top-level category if not) or a
-// new ingredient (which always needs a destination category to live in).
+// Whether the user is adding a new subcategory or a new ingredient under
+// the dialog's (fixed) destination category.
 enum TemplateNodeKind { category, ingredient }
 
 // What AddTemplateNodeDialog hands back when the user taps "Dodaj": enough
 // information for the caller to build either a new Category or a new
-// Ingredient and insert it into the tree at `destination` (or at the top
-// level, for a category, if `destination` is null).
+// Ingredient - the caller already knows where it goes, since that's the
+// exact category the dialog was opened for (see TemplateContentScreen's
+// _quickAddAt).
 class AddTemplateNodeResult {
   final TemplateNodeKind kind;
   final String name;
-  final Category? destination;
 
   // Only meaningful when kind == TemplateNodeKind.ingredient.
   final String producer;
@@ -27,7 +25,6 @@ class AddTemplateNodeResult {
   const AddTemplateNodeResult({
     required this.kind,
     required this.name,
-    required this.destination,
     this.producer = '',
     this.description = '',
     this.bottlesCount = 0,
@@ -38,17 +35,19 @@ class AddTemplateNodeResult {
 // ============================================================================
 // AddTemplateNodeDialog
 // ----------------------------------------------------------------------------
-// The single entry point for adding new content to a template, opened from
-// the bottom bar's "Dodaj" button: a name, a category-vs-ingredient type
-// switch, a destination picker (reusing CategoryPathPicker - the same tree
-// used to move an existing ingredient), and - only once "Składnik" is
-// chosen - the same producer/description/bottle-count/tags fields used
-// when editing an ingredient (see IngredientFieldsSection).
+// The quick "+" add flow, opened from a specific category's action row in
+// the template tree: a name, a category-vs-ingredient type switch, and -
+// only once "Składnik" is chosen - the same producer/description/bottle
+// count/tags fields used when editing an ingredient (see
+// IngredientFieldsSection). Unlike the old version of this dialog, there's
+// no destination picker here - `destination` is fixed to whichever
+// category's "+" button the user tapped, which is shown read-only for
+// context.
 // ============================================================================
 class AddTemplateNodeDialog extends StatefulWidget {
-  final List<Category> categories;
+  final Category destination;
 
-  const AddTemplateNodeDialog({required this.categories, super.key});
+  const AddTemplateNodeDialog({required this.destination, super.key});
 
   @override
   State<AddTemplateNodeDialog> createState() => _AddTemplateNodeDialogState();
@@ -61,7 +60,6 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
   late final TextEditingController _newTagController;
 
   TemplateNodeKind _kind = TemplateNodeKind.category;
-  Category? _destination;
   int _bottlesCount = 0;
   List<String> _tags = [];
 
@@ -86,15 +84,7 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
     super.dispose();
   }
 
-  // A name is always required; an ingredient additionally needs somewhere
-  // to live, since the data format has no concept of a "loose" ingredient
-  // outside any category - a new category is allowed to have no
-  // destination (it just becomes a top-level one instead).
-  bool get _canSave {
-    if (_nameController.text.trim().isEmpty) return false;
-    if (_kind == TemplateNodeKind.ingredient && _destination == null) return false;
-    return true;
-  }
+  bool get _canSave => _nameController.text.trim().isNotEmpty;
 
   void _changeBottles(int delta) {
     setState(() => _bottlesCount = (_bottlesCount + delta).clamp(0, 999));
@@ -124,7 +114,6 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
       AddTemplateNodeResult(
         kind: _kind,
         name: _nameController.text.trim(),
-        destination: _destination,
         producer: _producerController.text.trim(),
         description: _descriptionController.text.trim(),
         bottlesCount: _bottlesCount,
@@ -146,6 +135,12 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                'Do: ${widget.destination.name}',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 12),
+
               TextField(
                 controller: _nameController,
                 autofocus: true,
@@ -159,7 +154,7 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
                 segments: const [
                   ButtonSegment(
                     value: TemplateNodeKind.category,
-                    label: Text('Kategoria'),
+                    label: Text('Podkategoria'),
                     icon: Icon(Icons.folder_outlined),
                   ),
                   ButtonSegment(
@@ -171,31 +166,10 @@ class _AddTemplateNodeDialogState extends State<AddTemplateNodeDialog> {
                 selected: {_kind},
                 onSelectionChanged: (selection) => setState(() => _kind = selection.first),
               ),
-              const SizedBox(height: 16),
-
-              Text('Lokalizacja', style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 4),
-              CategoryPathPicker(
-                categories: widget.categories,
-                selected: _destination,
-                // A category with no chosen destination just becomes a new
-                // top-level category; an ingredient always needs a real
-                // destination (enforced by _canSave), so this option is
-                // only offered while adding a category.
-                allowTopLevel: _kind == TemplateNodeKind.category,
-                onSelected: (category) => setState(() => _destination = category),
-              ),
-              if (isIngredient && _destination == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Wybierz kategorię dla nowego składnika.',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
-                  ),
-                ),
 
               // Only ingredients carry these extra fields - a category is
-              // fully described by just its name and location above.
+              // fully described by just its name and (fixed) location
+              // above.
               if (isIngredient) ...[
                 const SizedBox(height: 16),
                 IngredientFieldsSection(

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/category.dart';
 import '../services/template_service.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/category_row_color.dart';
+import '../widgets/ingredient_tile.dart';
 import '../widgets/top_nav_tiles.dart';
 import 'ingredients_screen.dart';
 
@@ -13,7 +15,13 @@ import 'ingredients_screen.dart';
 // full category tree once - from whichever ingredient template is
 // currently "active" (see TemplateService.resolveActiveIngredientTemplate,
 // which is driven by the selection made in "Zarządzaj zestawami") - then
-// renders it as a list of expandable CategoryTreeItem rows.
+// renders it as one continuous, collapsible table (see _BrowseCategoryTile),
+// the same visual structure TemplateContentScreen's editor uses for the
+// same tree, just without any of its edit/add/delete actions - this screen
+// is read-only, so there's nothing for a button to do here. Ingredients sit
+// inline as IngredientTile cards wherever their category is expanded, the
+// same tile IngredientsScreen's flat, searchable list uses (reachable here
+// via "Wyświetl wszystkie" below).
 // ============================================================================
 class CategoryBrowserScreen extends StatefulWidget {
   const CategoryBrowserScreen({super.key});
@@ -76,10 +84,11 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
+              padding: const EdgeInsets.all(16),
               children: [
                 const TopNavTiles(),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   child: SizedBox(
                     width: double.infinity,
                     child: FilledButton.tonalIcon(
@@ -89,15 +98,22 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
                     ),
                   ),
                 ),
-                // Spread operator (...) inlines each mapped widget directly
-                // into this children list, as if we had written them out
-                // one by one - one top-level tree row per top-level category.
-                ..._categories.map(
-                  (category) => CategoryTreeItem(
-                    category: category,
-                    allCategories: _categories,
+                if (_categories.isNotEmpty)
+                  // One continuous, rounded "table" - every category row
+                  // (and, once expanded, its ingredients) lives inside this
+                  // single Card, separated by thin Dividers - see
+                  // TemplateContentScreen's _buildCategoryTree, which builds
+                  // the editable counterpart of exactly this same table.
+                  Card(
+                    clipBehavior: Clip.antiAlias,
+                    margin: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    child: Column(
+                      children: _categories
+                          .map((category) => _BrowseCategoryTile(category: category, depth: 0))
+                          .toList(),
+                    ),
                   ),
-                ),
               ],
             ),
     );
@@ -105,142 +121,121 @@ class _CategoryBrowserScreenState extends State<CategoryBrowserScreen> {
 }
 
 // ============================================================================
-// CategoryTreeItem
+// _BrowseCategoryTile
 // ----------------------------------------------------------------------------
-// Renders a single category as a tappable card, plus (if it has
-// subcategories) an expand/collapse arrow that reveals nested
-// CategoryTreeItem rows for each subcategory - i.e. this widget recursively
-// builds itself to represent an arbitrarily deep category tree.
-//
-// It's a StatefulWidget purely to remember whether *this* row is expanded;
-// that state is local to each row and doesn't need to live in a parent.
+// One row of the read-only table built by CategoryBrowserScreen: a header
+// (name + "N podkategorii • M składników" summary) that expands/collapses
+// its children on tap - no edit/add/delete actions, since this screen is
+// read-only. When expanded, shows one _BrowseCategoryTile per subcategory
+// and one IngredientTile per direct ingredient, inline. Mirrors
+// TemplateContentScreen's _CategoryTile - same row tinting (categoryRowColor)
+// and "one continuous table" structure - just without its action buttons.
 // ============================================================================
-class CategoryTreeItem extends StatefulWidget {
+class _BrowseCategoryTile extends StatefulWidget {
   final Category category;
 
-  // The complete category tree (not just this branch) - passed through
-  // unchanged so that deeper screens (like the tag filter) can see tags
-  // used anywhere in the app, not just under this category.
-  final List<Category> allCategories;
+  // How many levels deep in the tree this node is - 0 for a top-level
+  // category, 1 for its direct children, and so on. Drives how dark the
+  // row's tint is (see categoryRowColor) and how large/bold its name reads
+  // (see _categoryNameStyle) - deliberately *not* left indentation, so
+  // every row - and every ingredient tile nested under it - keeps the
+  // table's full width regardless of how deep it sits.
+  final int depth;
 
-  const CategoryTreeItem({
-    super.key,
-    required this.category,
-    required this.allCategories,
-  });
+  const _BrowseCategoryTile({required this.category, required this.depth});
 
   @override
-  State<CategoryTreeItem> createState() => _CategoryTreeItemState();
+  State<_BrowseCategoryTile> createState() => _BrowseCategoryTileState();
 }
 
-class _CategoryTreeItemState extends State<CategoryTreeItem> {
-  bool _isExpanded = false;
+class _BrowseCategoryTileState extends State<_BrowseCategoryTile> {
+  // Starts collapsed - the user drills down into just the branches they
+  // care about, rather than the whole tree dumping open at once.
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
-    final hasSubcategories = widget.category.subcategories.isNotEmpty;
-
-    // `allIngredients` recursively walks this category's whole subtree, so
-    // it's computed once here and reused below (for both the "N produktów"
-    // subtitle and the tap handler) instead of calling it twice and doing
-    // that walk redundantly on every build.
-    final ingredients = widget.category.allIngredients;
+    final category = widget.category;
+    final depth = widget.depth;
+    final hasChildren = category.subcategories.isNotEmpty || category.ingredients.isNotEmpty;
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 4,
-          ),
-          child: Card(
-            clipBehavior: Clip.antiAlias,
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 10,
-              ),
-              leading: Icon(
-                // Folder icon for a category that groups other categories,
-                // bottle icon for one that directly holds ingredients.
-                hasSubcategories
-                    ? Icons.folder_outlined
-                    : Icons.liquor_outlined,
-                color: Theme.of(context).colorScheme.onSecondaryContainer,
-              ),
-              title: Text(
-                widget.category.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
-              ),
-              subtitle: Text(
-                '${ingredients.length} produktów',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSecondaryContainer,
-                ),
-              ),
-              onTap: () {
-                // Tapping the row (not the expand arrow) drills into a
-                // dedicated screen listing every ingredient in this branch.
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => IngredientsScreen(
-                      ingredients: ingredients,
-                      title: widget.category.name,
-                      allCategories: widget.allCategories,
+        Material(
+          color: categoryRowColor(depth),
+          child: InkWell(
+            // Only a row with something inside it can be expanded/collapsed
+            // - an empty category's header is otherwise inert.
+            onTap: hasChildren ? () => setState(() => _expanded = !_expanded) : null,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          category.name,
+                          style: _categoryNameStyle(depth),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          _summaryFor(category),
+                          style: TextStyle(color: mutedColor, fontSize: 12),
+                        ),
+                      ],
                     ),
                   ),
-                );
-              },
-              trailing: hasSubcategories
-                  // Only show the expand/collapse arrow when there's
-                  // actually something to expand into.
-                  ? IconButton(
-                      icon: Icon(
-                        _isExpanded
-                            ? Icons.expand_less
-                            : Icons.expand_more,
-                      ),
-                      color: Theme.of(context).colorScheme.onSecondaryContainer,
-                      onPressed: () {
-                        // setState() here only rebuilds this row (and its
-                        // children), not the whole screen.
-                        setState(() {
-                          _isExpanded = !_isExpanded;
-                        });
-                      },
-                    )
-                  : null,
+                  if (hasChildren)
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      color: mutedColor,
+                    ),
+                ],
+              ),
             ),
           ),
         ),
-
-        if (_isExpanded)
-          Padding(
-            // Indent nested rows so the tree hierarchy is visible at a
-            // glance - each depth level shifts 24px further right.
-            padding: const EdgeInsets.only(left: 24),
-            child: Column(
-              children: widget.category.subcategories
-                  .map(
-                    // Recursive step: each subcategory becomes its own
-                    // CategoryTreeItem, which can itself expand further.
-                    (subcategory) => CategoryTreeItem(
-                      category: subcategory,
-                      allCategories: widget.allCategories,
-                    ),
-                  )
-                  .toList(),
-            ),
+        const Divider(height: 1),
+        if (_expanded) ...[
+          ...category.subcategories.map(
+            (sub) => _BrowseCategoryTile(category: sub, depth: depth + 1),
           ),
+          ...category.ingredients.map(
+            (ingredient) => IngredientTile(ingredient: ingredient),
+          ),
+        ],
       ],
     );
   }
+}
+
+// Picks a category name's text style for a given nesting depth: bold and
+// largest at the top level, getting smaller and lighter-weight with each
+// level deeper - the nesting cue that used to be left indentation, now that
+// rows no longer shift right by depth (see the `depth` field doc above).
+TextStyle _categoryNameStyle(int depth) {
+  final fontSize = (17 - depth * 1.5).clamp(12.0, 17.0);
+  final fontWeight = switch (depth) {
+    0 => FontWeight.bold,
+    1 => FontWeight.w600,
+    _ => FontWeight.w500,
+  };
+  return TextStyle(fontSize: fontSize, fontWeight: fontWeight);
+}
+
+// Builds the "N podkategorii • M składników" summary line shown under a
+// category's name - the same summary TemplateContentScreen's editor shows
+// for the same data.
+String _summaryFor(Category category) {
+  final subcategoryCount = category.subcategories.length;
+  final ingredientCount = category.allIngredients.length;
+
+  if (subcategoryCount > 0) {
+    return '$subcategoryCount podkategorii • $ingredientCount składników';
+  }
+  return '$ingredientCount składników';
 }

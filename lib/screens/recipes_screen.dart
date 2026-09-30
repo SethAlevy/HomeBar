@@ -61,6 +61,12 @@ class _RecipesScreenState extends State<RecipesScreen> {
   // something looks wrongly hidden.
   bool _availableOnly = true;
 
+  // Names of the currently active templates, shown in the persistent
+  // footer bar (see build()) so it's always obvious which recipe/ingredient
+  // set this screen's data is coming from.
+  String _recipeTemplateName = '';
+  String _ingredientTemplateName = '';
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +75,7 @@ class _RecipesScreenState extends State<RecipesScreen> {
 
   Future<void> _load() async {
     final template = await TemplateService.resolveActiveRecipeTemplate();
+    final ingredientTemplate = await TemplateService.resolveActiveIngredientTemplate();
     final recipes = await TemplateService.loadRecipes(template);
     final availableMatchKeys = await TemplateService.loadAvailableMatchKeys();
 
@@ -88,6 +95,8 @@ class _RecipesScreenState extends State<RecipesScreen> {
         ..addAll(_allTags);
       _isLoading = false;
       _filteredRecipes = _applyFilters();
+      _recipeTemplateName = template.name;
+      _ingredientTemplateName = ingredientTemplate.name;
     });
   }
 
@@ -158,6 +167,26 @@ class _RecipesScreenState extends State<RecipesScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Przepisy')),
       drawer: const AppDrawer(),
+      // A persistent footer - stays pinned at the bottom regardless of how
+      // far the recipe list above is scrolled - naming which templates the
+      // screen's data is currently coming from.
+      bottomNavigationBar: BottomAppBar(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ActiveTemplateLine(
+              label: 'Wybrany szablon przepisów',
+              value: _recipeTemplateName,
+            ),
+            _ActiveTemplateLine(
+              label: 'Wybrany szablon składników',
+              value: _ingredientTemplateName,
+            ),
+          ],
+        ),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _recipes.isEmpty
@@ -200,6 +229,26 @@ class _RecipesScreenState extends State<RecipesScreen> {
                       ),
                   ],
                 ),
+    );
+  }
+}
+
+// One "label: value" line in the footer bar - small and muted, since it's
+// informational rather than something to act on.
+class _ActiveTemplateLine extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _ActiveTemplateLine({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '$label: ${value.isEmpty ? '—' : value}',
+      style: TextStyle(
+        fontSize: 11,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }

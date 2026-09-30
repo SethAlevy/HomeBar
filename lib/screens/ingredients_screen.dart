@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/ingredient.dart';
 import '../models/category.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/ingredient_tile.dart';
 import '../widgets/search_field.dart';
 import '../widgets/tag_filter_panel.dart';
 import '../widgets/top_nav_tiles.dart';
@@ -200,34 +201,7 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
           // own.
           SliverList.builder(
             itemCount: _filteredIngredients.length,
-            itemBuilder: (context, index) {
-              final ingredient = _filteredIngredients[index];
-              return Card(
-                margin: const EdgeInsets.all(8.0),
-                child: ListTile(
-                  title: Text(ingredient.name),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ingredient.producer),
-                      Text(ingredient.description),
-                      // Render tags as small chips for quick scanning.
-                      if (ingredient.tags.isNotEmpty)
-                        Wrap(
-                          spacing: 4.0,
-                          children: ingredient.tags
-                              .map((tag) => Chip(
-                                    label: Text(tag),
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ))
-                              .toList(),
-                        ),
-                    ],
-                  ),
-                  trailing: Text('${ingredient.bottlesCount} bottles'),
-                ),
-              );
-            },
+            itemBuilder: (context, index) => IngredientTile(ingredient: _filteredIngredients[index]),
           ),
         ],
       ),

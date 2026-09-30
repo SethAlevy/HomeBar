@@ -10,11 +10,14 @@ import 'template_content_screen.dart';
 // ManageHomebarsScreen
 // ----------------------------------------------------------------------------
 // This screen is the "management panel" for template files: YAML files
-// that describe an ingredient list or a recipe list. From here the user
-// can:
-//   1) pick which templates are the "active" ones for this homebar,
-//   2) browse/inspect (and edit) the content of any template, and
-//   3) create a brand-new ingredient template from scratch.
+// that describe an ingredient list or a recipe list. It shows just two
+// tiles - "Składniki" and "Przepisy" - each naming the currently active
+// template of that kind. Tapping either opens a modal sheet (see
+// _TemplateListSheet) listing every template of that type: tapping a row
+// makes it the active one (replacing the old separate "Wczytaj szablon"
+// flow), its "Edytuj" button opens the full tree editor
+// (TemplateContentScreen), and a persistent "Dodaj nowy" bar at the bottom
+// of the sheet creates a brand-new template of that type.
 //
 // It is a StatefulWidget because it needs to remember things across
 // rebuilds: the list of templates loaded from disk/assets, whether we are
@@ -36,12 +39,11 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
   List<TemplateFile> _templates = [];
 
   // Path of the template currently marked as "active" for ingredients/recipes.
-  // Persisted via SettingsService (see _loadSelection/_selectTemplate below)
-  // so the choice survives closing and reopening the app. The ingredient
-  // one drives what CategoryBrowserScreen actually loads (see
-  // TemplateService.resolveActiveIngredientTemplate) - see the note on
-  // _selectTemplate() below for the recipe one, which is still just a
-  // label for now.
+  // Persisted via SettingsService (see _loadSelection/_selectActiveTemplate
+  // below) so the choice survives closing and reopening the app. The
+  // ingredient one drives what CategoryBrowserScreen actually loads (see
+  // TemplateService.resolveActiveIngredientTemplate); the recipe one drives
+  // RecipesScreen the same way (see TemplateService.resolveActiveRecipeTemplate).
   String? _selectedIngredientTemplate;
   String? _selectedRecipeTemplate;
 
@@ -74,10 +76,10 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
   }
 
   // Restores whichever templates were selected the last time this screen
-  // was used, so "Wczytaj szablon" doesn't silently forget the choice
-  // every time the app restarts. Runs independently of _loadTemplates()
-  // above - the selection is just remembered file paths, so it doesn't
-  // need the bundled template list to be loaded first.
+  // was used, so the active-template choice doesn't silently reset every
+  // time the app restarts. Runs independently of _loadTemplates() above -
+  // the selection is just remembered file paths, so it doesn't need the
+  // bundled template list to be loaded first.
   Future<void> _loadSelection() async {
     final settings = await SettingsService.load();
 
@@ -93,163 +95,102 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
   // ingredients or just recipes. They recompute on every access rather than
   // being cached - fine here since `_templates` is small and these are only
   // read while building the UI.
-  List<TemplateFile> get _ingredientTemplates => _templates
-      .where((t) => t.type == TemplateType.ingredient)
-      .toList();
+  List<TemplateFile> get _ingredientTemplates =>
+      _templates.where((t) => t.type == TemplateType.ingredient).toList();
 
-  List<TemplateFile> get _recipeTemplates => _templates
-      .where((t) => t.type == TemplateType.recipe)
-      .toList();
+  List<TemplateFile> get _recipeTemplates =>
+      _templates.where((t) => t.type == TemplateType.recipe).toList();
 
-  // Opens the "Wczytaj szablon" (Load template) dialog, where the user picks
-  // one ingredient template and one recipe template to mark as active.
-  //
-  // NOTE for learners: the ingredient pick here is what
-  // TemplateService.resolveActiveIngredientTemplate() reads back (via
-  // SettingsService) to decide what CategoryBrowserScreen shows - so
-  // confirming a new ingredient template here really does switch the
-  // app's active inventory. The recipe pick is still just a label for now:
-  // there's no recipe-browsing screen yet to hand it off to.
-  Future<void> _selectTemplate() async {
-    // These are *temporary* picks made inside the dialog. We don't touch the
-    // real _selectedIngredientTemplate/_selectedRecipeTemplate fields until
-    // the user confirms with "Zastosuj" (Apply) - that way "Anuluj" (Cancel)
-    // can simply discard them.
-    String? tempIngredient = _selectedIngredientTemplate;
-    String? tempRecipe = _selectedRecipeTemplate;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        // StatefulBuilder gives a dialog its own tiny bit of local state
-        // (dialogSetState) without needing a whole separate StatefulWidget
-        // class. We need it here because tapping a template inside the
-        // dialog should visually update the dialog immediately.
-        builder: (context, dialogSetState) {
-          return AlertDialog(
-            title: const Text('Wczytaj szablon'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _TemplateOptionList(
-                  title: 'Wybierz listę składników',
-                  selectedPath: tempIngredient,
-                  options: _ingredientTemplates,
-                  onSelected: (template) {
-                    tempIngredient = template.path;
-                    // Rebuild just the dialog so the new selection shows up.
-                    dialogSetState(() {});
-                  },
-                ),
-                const SizedBox(height: 12),
-                _TemplateOptionList(
-                  title: 'Wybierz listę przepisów',
-                  selectedPath: tempRecipe,
-                  options: _recipeTemplates,
-                  onSelected: (template) {
-                    tempRecipe = template.path;
-                    dialogSetState(() {});
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                // Passing `false` tells the caller "user cancelled".
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Anuluj'),
-              ),
-              FilledButton(
-                // Passing `true` tells the caller "user confirmed".
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Zastosuj'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    // Only commit the temporary picks to real state if the dialog was
-    // confirmed (result == true) and this screen is still on screen.
-    if (result == true && mounted) {
-      setState(() {
-        _selectedIngredientTemplate = tempIngredient;
-        _selectedRecipeTemplate = tempRecipe;
-      });
-
-      // Persist the choice so it's still selected next time this screen -
-      // or the home screen's summary - is opened, even after the app is
-      // fully closed and reopened.
-      await SettingsService.saveSelectedTemplates(
-        ingredientTemplatePath: tempIngredient,
-        recipeTemplatePath: tempRecipe,
-      );
-    }
+  String _activeNameFor(List<TemplateFile> templates, String? selectedPath) {
+    if (selectedPath == null) return 'Nie wybrano';
+    return templates
+        .firstWhere(
+          (t) => t.path == selectedPath,
+          orElse: () => TemplateFile(path: selectedPath, name: selectedPath, type: TemplateType.ingredient),
+        )
+        .name;
   }
 
-  // Opens the "new template" dialog (name + a flat list of category
-  // names - nothing more), then actually creates the file, makes it the
-  // active ingredient template, and re-scans so it shows up in every
-  // template picker from now on.
-  Future<void> _addNewIngredientTemplate() async {
-    final result = await showDialog<CreateTemplateResult>(
-      context: context,
-      builder: (context) => const CreateTemplateDialog(),
-    );
-
-    if (result == null || !mounted) return;
-
-    final template = await TemplateService.createIngredientTemplate(
-      name: result.name,
-      categoryNames: result.categoryNames,
-    );
-
-    if (!mounted) return;
-
-    // Re-scan so the freshly created file appears in _templates (and
-    // therefore in "Wczytaj szablon"/"Edytuj szablony"), not just as the
-    // current selection below.
-    await _loadTemplates();
-    if (!mounted) return;
-
-    setState(() => _selectedIngredientTemplate = template.path);
+  // Marks `template` as the active one of its type and persists the choice
+  // immediately - there's no separate "Zastosuj" confirmation step anymore,
+  // tapping a row in the modal sheet takes effect right away.
+  Future<void> _selectActiveTemplate(TemplateType type, TemplateFile template) async {
+    setState(() {
+      if (type == TemplateType.ingredient) {
+        _selectedIngredientTemplate = template.path;
+      } else {
+        _selectedRecipeTemplate = template.path;
+      }
+    });
 
     await SettingsService.saveSelectedTemplates(
-      ingredientTemplatePath: template.path,
+      ingredientTemplatePath: _selectedIngredientTemplate,
       recipeTemplatePath: _selectedRecipeTemplate,
-    );
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Utworzono nowy zestaw "${template.name}".')),
     );
   }
 
-  // Opens the "Edytuj szablony" (Edit templates) flow: first a small dialog
-  // to pick *which* template to inspect, then - once chosen - pushes a new
-  // full screen that shows that template's entire tree of categories and
-  // ingredients.
-  Future<void> _editTemplates() async {
-    // showDialog<TemplateFile> means: this dialog, when popped, hands back
-    // either a TemplateFile (the one the user tapped) or null (dismissed).
-    final selected = await showDialog<TemplateFile>(
-      context: context,
-      builder: (context) => _TemplateSelectorDialog(
-        templates: _templates,
-      ),
-    );
-
-    if (selected == null || !mounted) return;
-
-    // Navigator.push adds a new screen on top of the navigation stack;
-    // MaterialPageRoute gives it the standard Material slide-in transition.
+  // Dismisses the modal sheet and pushes the full tree editor for one
+  // template - shared by both tiles' sheets via their "Edytuj" buttons.
+  void _openEditor(TemplateFile template) {
+    Navigator.pop(context);
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => TemplateContentScreen(template: selected),
+      MaterialPageRoute(builder: (context) => TemplateContentScreen(template: template)),
+    );
+  }
+
+  // The modal sheet's "Dodaj nowy": opens the right creation dialog for
+  // `type`, creates the template, makes it the active one, and hands the
+  // new TemplateFile back so the sheet can show it immediately.
+  Future<TemplateFile?> _createNewTemplate(TemplateType type) async {
+    if (type == TemplateType.ingredient) {
+      final result = await showDialog<CreateTemplateResult>(
+        context: context,
+        builder: (context) => const CreateTemplateDialog(),
+      );
+      if (result == null || !mounted) return null;
+
+      final template = await TemplateService.createIngredientTemplate(
+        name: result.name,
+        categoryNames: result.categoryNames,
+      );
+      if (!mounted) return null;
+      await _selectActiveTemplate(TemplateType.ingredient, template);
+      return template;
+    }
+
+    final name = await _promptTemplateName(context);
+    if (name == null || !mounted) return null;
+
+    final template = await TemplateService.createRecipeTemplate(name: name);
+    if (!mounted) return null;
+    await _selectActiveTemplate(TemplateType.recipe, template);
+    return template;
+  }
+
+  // Opens the modal sheet for one template type (see _TemplateListSheet).
+  // Re-scans the full template list once the sheet closes, in case a new
+  // template was created while it was open.
+  Future<void> _openTemplatesModal(TemplateType type) async {
+    final templates = type == TemplateType.ingredient ? _ingredientTemplates : _recipeTemplates;
+    final selectedPath =
+        type == TemplateType.ingredient ? _selectedIngredientTemplate : _selectedRecipeTemplate;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _TemplateListSheet(
+        type: type,
+        templates: templates,
+        selectedPath: selectedPath,
+        onSelect: (template) => _selectActiveTemplate(type, template),
+        onEdit: _openEditor,
+        onAddNew: () => _createNewTemplate(type),
       ),
     );
+
+    await _loadTemplates();
   }
 
   @override
@@ -272,23 +213,18 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // --- Action buttons -------------------------------------
-                FilledButton.icon(
-                  onPressed: _selectTemplate,
-                  icon: const Icon(Icons.folder_open_outlined),
-                  label: const Text('Wczytaj szablon'),
+                _ManageTile(
+                  icon: Icons.liquor_outlined,
+                  title: 'Składniki',
+                  subtitle: 'Aktywny: ${_activeNameFor(_ingredientTemplates, _selectedIngredientTemplate)}',
+                  onTap: () => _openTemplatesModal(TemplateType.ingredient),
                 ),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _editTemplates,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edytuj szablony'),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _addNewIngredientTemplate,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Dodaj nowy zestaw'),
+                _ManageTile(
+                  icon: Icons.local_bar_outlined,
+                  title: 'Przepisy',
+                  subtitle: 'Aktywny: ${_activeNameFor(_recipeTemplates, _selectedRecipeTemplate)}',
+                  onTap: () => _openTemplatesModal(TemplateType.recipe),
                 ),
               ],
             ),
@@ -296,115 +232,230 @@ class _ManageHomebarsScreenState extends State<ManageHomebarsScreen> {
   }
 }
 
-// Shared building block for "here is a titled, expandable list of template
-// files, tap one to select it" - used both by the "Wczytaj szablon" dialog
-// (where selecting just updates local state) and by the "Edytuj szablony"
-// dialog (where selecting immediately closes the dialog). The two call
-// sites decide what "selecting" means via the onSelected callback; this
-// widget only handles displaying the options.
-class _TemplateOptionList extends StatelessWidget {
+// One of the two top-level tiles ("Składniki"/"Przepisy"): an icon, a
+// title, and a subtitle naming the currently active template of that kind.
+// Tapping it opens that type's _TemplateListSheet.
+class _ManageTile extends StatelessWidget {
+  final IconData icon;
   final String title;
-  final List<TemplateFile> options;
-  final ValueChanged<TemplateFile> onSelected;
+  final String subtitle;
+  final VoidCallback onTap;
 
-  // The path of the option that should be shown as "currently selected".
-  // Pass null when there is no meaningful "current selection" concept
-  // (e.g. the pick-once-and-navigate-away flow).
-  final String? selectedPath;
-
-  const _TemplateOptionList({
+  const _ManageTile({
+    required this.icon,
     required this.title,
-    required this.options,
-    required this.onSelected,
-    this.selectedPath,
+    required this.subtitle,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    // ExpansionTile is a ready-made "tap to expand/collapse" list tile -
-    // it keeps its own open/closed state internally, so we don't need to
-    // manage that here.
-    return ExpansionTile(
-      title: Text(title),
-      subtitle: Text(
-        selectedPath == null ? 'Wybierz' : _fileNameOf(selectedPath!),
-      ),
-      children: options.isEmpty
-          // Guard against an empty list so users see a helpful message
-          // instead of a blank, seemingly-broken expanded section.
-          ? const [ListTile(title: Text('Brak szablonów'))]
-          : options
-              .map(
-                (template) => ListTile(
-                  selected: selectedPath == template.path,
-                  leading: const Icon(Icons.description_outlined),
-                  title: Text(template.name),
-                  subtitle: Text(template.path),
-                  onTap: () => onSelected(template),
-                ),
-              )
-              .toList(),
-    );
-  }
-
-  // Same "strip path down to filename" logic used elsewhere; kept local to
-  // this widget since it is only needed for the subtitle above.
-  String _fileNameOf(String path) => path.replaceAll('\\', '/').split('/').last;
-}
-
-// Dialog shown by "Edytuj szablony": pick one template (ingredient or
-// recipe) to open in the full-screen tree viewer. There is no "Apply"
-// step here - tapping an option immediately pops the dialog with that
-// template as the result.
-class _TemplateSelectorDialog extends StatelessWidget {
-  final List<TemplateFile> templates;
-
-  const _TemplateSelectorDialog({
-    required this.templates,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final ingredientTemplates = templates
-        .where((template) => template.type == TemplateType.ingredient)
-        .toList();
-
-    final recipeTemplates = templates
-        .where((template) => template.type == TemplateType.recipe)
-        .toList();
-
-    return AlertDialog(
-      title: const Text('Edytuj szablony'),
-      content: SizedBox(
-        // double.maxFinite lets the dialog grow as wide as its parent
-        // allows, instead of shrinking to fit its (variable-width) content.
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
             children: [
-              _TemplateOptionList(
-                title: 'Składniki',
-                options: ingredientTemplates,
-                onSelected: (template) => Navigator.pop(context, template),
+              Icon(icon, size: 28),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 4),
+                    Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              _TemplateOptionList(
-                title: 'Przepisy',
-                options: recipeTemplates,
-                onSelected: (template) => Navigator.pop(context, template),
-              ),
+              const Icon(Icons.chevron_right),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// _TemplateListSheet
+// ----------------------------------------------------------------------------
+// The modal opened by tapping a _ManageTile: every template of one type,
+// each row showing whether it's the active one, tappable to make it active,
+// with its own "Edytuj" button to open the full tree editor. A persistent
+// "Dodaj nowy" bar sits pinned at the bottom of the sheet regardless of how
+// far the list is scrolled.
+//
+// Keeps a local copy of `templates`/`selectedPath` so tapping a row or
+// adding a new template updates the sheet immediately, without waiting for
+// it to close and the parent screen to rebuild.
+// ============================================================================
+class _TemplateListSheet extends StatefulWidget {
+  final TemplateType type;
+  final List<TemplateFile> templates;
+  final String? selectedPath;
+  final Future<void> Function(TemplateFile template) onSelect;
+  final void Function(TemplateFile template) onEdit;
+  final Future<TemplateFile?> Function() onAddNew;
+
+  const _TemplateListSheet({
+    required this.type,
+    required this.templates,
+    required this.selectedPath,
+    required this.onSelect,
+    required this.onEdit,
+    required this.onAddNew,
+  });
+
+  @override
+  State<_TemplateListSheet> createState() => _TemplateListSheetState();
+}
+
+class _TemplateListSheetState extends State<_TemplateListSheet> {
+  late List<TemplateFile> _templates;
+  String? _selectedPath;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _templates = widget.templates;
+    _selectedPath = widget.selectedPath;
+  }
+
+  Future<void> _select(TemplateFile template) async {
+    if (_selectedPath == template.path) return;
+    setState(() => _selectedPath = template.path);
+    await widget.onSelect(template);
+  }
+
+  Future<void> _addNew() async {
+    setState(() => _busy = true);
+    final created = await widget.onAddNew();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (created != null) {
+        _templates = [..._templates, created];
+        _selectedPath = created.path;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.type == TemplateType.ingredient ? 'Szablony składników' : 'Szablony przepisów';
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Zamknij',
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _templates.isEmpty
+                ? const Center(child: Text('Brak szablonów.'))
+                : ListView.builder(
+                    controller: scrollController,
+                    itemCount: _templates.length,
+                    itemBuilder: (context, index) {
+                      final template = _templates[index];
+                      final isActive = template.path == _selectedPath;
+                      return ListTile(
+                        leading: Icon(
+                          isActive ? Icons.check_circle : Icons.description_outlined,
+                          color: isActive ? Theme.of(context).colorScheme.primary : null,
+                        ),
+                        title: Text(template.name),
+                        subtitle: Text(isActive ? 'Aktywny' : template.path),
+                        selected: isActive,
+                        onTap: () => _select(template),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.edit_outlined),
+                          tooltip: 'Edytuj',
+                          onPressed: () => widget.onEdit(template),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          // The persistent "Dodaj nowy" footer - stays pinned at the
+          // bottom of the sheet regardless of how far the list above is
+          // scrolled.
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : _addNew,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.add),
+                  label: const Text('Dodaj nowy'),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Minimal single-field prompt for naming a brand-new recipe template - no
+// categories concept applies to recipes, so unlike CreateTemplateDialog
+// (ingredients) this needs nothing but a name.
+Future<String?> _promptTemplateName(BuildContext context) async {
+  final controller = TextEditingController();
+  final result = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Nowy szablon przepisów'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'Nazwa szablonu'),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Anuluj'),
         ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, controller.text.trim()),
+          child: const Text('Utwórz'),
+        ),
       ],
-    );
-  }
+    ),
+  );
+  controller.dispose();
+
+  if (result == null || result.isEmpty) return null;
+  return result;
 }

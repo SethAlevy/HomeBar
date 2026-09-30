@@ -61,6 +61,25 @@ class _RecipePickerScreenState extends State<RecipePickerScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Pomóż mi wybrać')),
       drawer: const AppDrawer(),
+      // Pinned to the bottom (rather than sitting above the result, where
+      // it'd need the user to scroll back up) so re-drawing is always one
+      // tap away, however far the result card is scrolled - the button's
+      // own label makes clear a second tap draws again.
+      bottomNavigationBar: (_isLoading || _availableRecipes.isEmpty)
+          ? null
+          : BottomAppBar(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _pickRandom,
+                    icon: const Icon(Icons.casino_outlined),
+                    label: Text(_picked == null ? 'Wylosuj mi drinka' : 'Losuj ponownie'),
+                  ),
+                ),
+              ),
+            ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _availableRecipes.isEmpty
@@ -68,14 +87,6 @@ class _RecipePickerScreenState extends State<RecipePickerScreen> {
               : Column(
                   children: [
                     const TopNavTiles(),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      child: FilledButton.icon(
-                        onPressed: _pickRandom,
-                        icon: const Icon(Icons.casino_outlined),
-                        label: const Text('Wylosuj mi drinka'),
-                      ),
-                    ),
                     Expanded(
                       child: _picked == null
                           ? const Center(child: Text('Kliknij przycisk, aby wylosować drinka.'))

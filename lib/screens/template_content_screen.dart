@@ -5,6 +5,8 @@ import '../models/ingredient.dart';
 import '../models/recipe.dart';
 import '../services/template_service.dart';
 import '../widgets/add_template_node_dialog.dart';
+import '../widgets/category_row_color.dart';
+import '../widgets/edit_recipe_dialog.dart';
 import '../widgets/edit_template_ingredient_dialog.dart';
 
 // ============================================================================
@@ -13,14 +15,12 @@ import '../widgets/edit_template_ingredient_dialog.dart';
 // Full-screen viewer AND editor for one template file (picked in
 // ManageHomebarsScreen) - branches on widget.template.type into two
 // completely different views:
-//   - Ingredient templates load a Category tree and render it as a fully
-//     expanded tree: categories as collapsible, color-coded group tiles
-//     (color darkens with nesting depth - see _categoryPalette), and
-//     ingredients as detail cards in a single fixed color (see
-//     _ingredientPalette) showing every field.
+//   - Ingredient templates load a Category tree and render it as one
+//     continuous table (see _buildCategoryTree): categories as collapsible
+//     rows subtly tinted by nesting depth (see categoryRowColor), and
+//     ingredients as plain, collapsible leaf rows (see _IngredientRow).
 //   - Recipe templates load a flat List<Recipe> and render it as a list of
-//     RecipeCard tiles with edit/delete buttons. Editing isn't built yet
-//     (see _editRecipe) - only deleting is, for now.
+//     RecipeCard tiles with add/edit/delete buttons (see EditRecipeDialog).
 //
 // Every edit only changes the in-memory data and marks it dirty - nothing
 // is written to disk until the bottom bar's "Zapisz" button is tapped (see
@@ -105,19 +105,41 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
     });
   }
 
-  // Recipe editing isn't built yet - same "coming soon" convention used
-  // elsewhere in the app (see HomeScreen/AppDrawer) for destinations that
-  // don't exist yet.
-  void _editRecipe(Recipe target) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edycja przepisów — wkrótce!')),
+  Future<void> _editRecipe(Recipe target) async {
+    final result = await showDialog<Recipe>(
+      context: context,
+      builder: (context) => EditRecipeDialog(recipe: target),
     );
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _recipes = _recipes.map((r) => identical(r, target) ? result : r).toList();
+      _isDirty = true;
+    });
+  }
+
+  Future<void> _addRecipe() async {
+    final result = await showDialog<Recipe>(
+      context: context,
+      builder: (context) => const EditRecipeDialog(),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _recipes = [..._recipes, result];
+      _isDirty = true;
+    });
   }
 
   // ---- Category actions ----------------------------------------------
 
   Future<void> _renameCategory(Category target) async {
-    final newName = await _showRenameDialog(context, target.name);
+    final newName = await _showTextPromptDialog(
+      context,
+      title: 'Zmień nazwę kategorii',
+      label: 'Nazwa',
+      initialValue: target.name,
+    );
     if (newName == null || newName == target.name) return;
 
     setState(() {
@@ -181,20 +203,34 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
 
   // ---- Add flow ---------------------------------------------------------
 
-  Future<void> _addNode() async {
+  // Bottom bar's "Dodaj grupę" - adds a brand-new top-level category, just
+  // by name. Adding subcategories/ingredients under a *specific* existing
+  // category instead goes through each category tile's own "+" button (see
+  // _quickAddAt below).
+  Future<void> _addTopLevelGroup() async {
+    final name = await _showTextPromptDialog(context, title: 'Dodaj grupę', label: 'Nazwa grupy');
+    if (name == null || !mounted) return;
+
+    setState(() {
+      _categories = [..._categories, Category(name: name)];
+      _isDirty = true;
+    });
+  }
+
+  // A category tile's "+" button - adds a new subcategory or ingredient
+  // directly under `category`, with no destination picker needed since the
+  // destination is exactly the row that was tapped.
+  Future<void> _quickAddAt(Category category) async {
     final result = await showDialog<AddTemplateNodeResult>(
       context: context,
-      builder: (context) => AddTemplateNodeDialog(categories: _categories),
+      builder: (context) => AddTemplateNodeDialog(destination: category),
     );
 
     if (result == null || !mounted) return;
 
     setState(() {
       if (result.kind == TemplateNodeKind.category) {
-        final newCategory = Category(name: result.name);
-        _categories = result.destination == null
-            ? [..._categories, newCategory]
-            : _insertCategoryInTree(_categories, result.destination!, newCategory);
+        _categories = _insertCategoryInTree(_categories, category, Category(name: result.name));
       } else {
         final newIngredient = Ingredient(
           name: result.name,
@@ -203,10 +239,7 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
           bottlesCount: result.bottlesCount,
           tags: result.tags,
         );
-        // AddTemplateNodeDialog only allows saving an ingredient once a
-        // destination has been chosen (see its _canSave getter), so this
-        // is never null in practice here.
-        _categories = _insertIngredientInTree(_categories, result.destination!, newIngredient);
+        _categories = _insertIngredientInTree(_categories, category, newIngredient);
       }
       _isDirty = true;
     });
@@ -236,21 +269,36 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
     }
     return ListView(
       padding: const EdgeInsets.all(16),
-      // depth: 0 because these are the top-level categories; each nested
-      // level below increases depth by one (see _CategoryTile below),
-      // which drives both indentation and how dark the tile's color is.
-      children: _categories
-          .map(
-            (category) => _CategoryTile(
-              category: category,
-              depth: 0,
-              onRenameCategory: _renameCategory,
-              onDeleteCategory: _deleteCategory,
-              onEditIngredient: _editIngredient,
-              onDeleteIngredient: _deleteIngredient,
-            ),
-          )
-          .toList(),
+      children: [
+        // One continuous, rounded "table" - every category/ingredient row
+        // lives inside this single Card (see _CategoryTile/_IngredientRow),
+        // separated by thin Dividers, rather than each node floating in
+        // its own separate card the way it used to.
+        Card(
+          clipBehavior: Clip.antiAlias,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          child: Column(
+            // depth: 0 because these are the top-level categories; each
+            // nested level below increases depth by one (see _CategoryTile
+            // below), which drives both indentation and how dark the
+            // row's subtle color tint is.
+            children: _categories
+                .map(
+                  (category) => _CategoryTile(
+                    category: category,
+                    depth: 0,
+                    onRenameCategory: _renameCategory,
+                    onDeleteCategory: _deleteCategory,
+                    onAddChild: _quickAddAt,
+                    onEditIngredient: _editIngredient,
+                    onDeleteIngredient: _deleteIngredient,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -269,14 +317,17 @@ class _TemplateContentScreenState extends State<TemplateContentScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            // Adding new recipes isn't built yet (see _editRecipe), so
-            // there's nothing for this button to do for a recipe template
-            // - only "Zapisz" (for recipe deletions) is offered there.
             if (!_isRecipeTemplate)
+              IconButton.filled(
+                icon: const Icon(Icons.add),
+                tooltip: 'Dodaj grupę',
+                onPressed: _isLoading ? null : _addTopLevelGroup,
+              ),
+            if (_isRecipeTemplate)
               _BottomBarAction(
                 icon: Icons.add,
-                label: 'Dodaj',
-                onPressed: _isLoading ? null : _addNode,
+                label: 'Dodaj przepis',
+                onPressed: _isLoading ? null : _addRecipe,
               ),
             _BottomBarAction(
               icon: Icons.save_outlined,
@@ -474,19 +525,24 @@ Future<bool> _confirmDelete(BuildContext context, String message) async {
   return confirmed ?? false;
 }
 
-// Simple single-field rename prompt, used for both top-level categories
-// and subcategories - they're both just Category, so one dialog covers
-// both.
-Future<String?> _showRenameDialog(BuildContext context, String currentName) async {
-  final controller = TextEditingController(text: currentName);
+// Simple single-text-field prompt - used for renaming a category
+// (pre-filled with its current name) and for "Dodaj grupę" (blank), since
+// both are really just "ask for one name".
+Future<String?> _showTextPromptDialog(
+  BuildContext context, {
+  required String title,
+  required String label,
+  String initialValue = '',
+}) async {
+  final controller = TextEditingController(text: initialValue);
   final result = await showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Zmień nazwę kategorii'),
+      title: Text(title),
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(labelText: 'Nazwa'),
+        decoration: InputDecoration(labelText: label),
       ),
       actions: [
         TextButton(
@@ -506,66 +562,8 @@ Future<String?> _showRenameDialog(BuildContext context, String currentName) asyn
   return result;
 }
 
-// ============================================================================
-// Color palettes
-// ============================================================================
-
-// A background/foreground color pair for one tile. `foreground` is always
-// picked to contrast with `background` (see _foregroundFor below), so text
-// and icons stay readable no matter how dark a nested category gets.
-class _DepthPalette {
-  final Color background;
-  final Color foreground;
-
-  const _DepthPalette(this.background, this.foreground);
-}
-
-// Hue/saturation for every category tile, regardless of depth - an orange,
-// matching the app's own theme color. Kept far enough from the ingredient
-// hue below (8, closer to red) that the two tile kinds still read as
-// distinct even though both are warm tones.
-const double _categoryHue = 32;
-const double _categorySaturation = 0.80;
-
-// Hue/saturation/lightness for every ingredient tile. Ingredients always
-// use this same fixed color no matter how deep they sit in the tree - only
-// *categories* darken with depth, so an ingredient's color instead signals
-// "this is a leaf, not a group".
-const double _ingredientHue = 8;
-const double _ingredientSaturation = 0.45;
-const double _ingredientLightness = 0.40;
-
-// Picks a category tile's color for a given nesting depth: the top level
-// starts bright, and each level deeper is a bit darker than its parent -
-// same hue throughout, so the whole branch still reads as "one category
-// and its subcategories" while the darkening makes the nesting visible at
-// a glance.
-_DepthPalette _categoryPalette(int depth) {
-  final lightness = (0.62 - depth * 0.09).clamp(0.22, 0.62);
-  final background =
-      HSLColor.fromAHSL(1.0, _categoryHue, _categorySaturation, lightness).toColor();
-  return _DepthPalette(background, _foregroundFor(background));
-}
-
-// The single fixed palette used by every ingredient tile - see the
-// constants above for why it doesn't vary with depth.
-_DepthPalette _ingredientPalette() {
-  const background =
-      HSLColor.fromAHSL(1.0, _ingredientHue, _ingredientSaturation, _ingredientLightness);
-  return _DepthPalette(background.toColor(), _foregroundFor(background.toColor()));
-}
-
-// Chooses black or white text/icons depending on how light or dark
-// `background` is, so a tile stays readable whether it landed near the
-// bright or dark end of the depth gradient above.
-Color _foregroundFor(Color background) {
-  return ThemeData.estimateBrightnessForColor(background) == Brightness.dark
-      ? Colors.white
-      : Colors.black87;
-}
-
 // Builds the "N podkategorii • M składników" summary line shown under a
-// category's title, so its tile communicates how much content is grouped
+// category's title, so its row communicates how much content is grouped
 // inside it without requiring it to be expanded first.
 String _summaryFor(Category category) {
   final subcategoryCount = category.subcategories.length;
@@ -580,23 +578,25 @@ String _summaryFor(Category category) {
 // ============================================================================
 // _CategoryTile
 // ----------------------------------------------------------------------------
-// Renders one Category - recursively. Draws itself as an expandable, color
-// coded tile containing its action buttons, one _CategoryTile per
-// subcategory, and one _IngredientCard per direct ingredient. The four
-// callbacks are handed down unchanged to every nested _CategoryTile, each
-// of which applies them to its *own* `category`, so only this top-level
-// widget needs to know how the actions are actually implemented.
+// Renders one Category - recursively - as one row of the tree's table: a
+// header (name, summary, and its add/edit/delete actions all on the same
+// line) that can be tapped to expand/collapse its children, followed - when
+// expanded - by one _CategoryTile per subcategory and one _IngredientRow
+// per direct ingredient. It's a StatefulWidget purely to remember whether
+// *this* row is expanded, the same "expansion state is local to each row"
+// pattern CategoryTreeItem uses on the read-only browsing screen.
 // ============================================================================
-class _CategoryTile extends StatelessWidget {
+class _CategoryTile extends StatefulWidget {
   final Category category;
 
   // How many levels deep in the tree this node is - 0 for a top-level
   // category, 1 for its direct children, and so on. Drives both left
-  // indentation and how dark the tile's color is.
+  // indentation and how dark the row's tint is (see categoryRowColor).
   final int depth;
 
   final ValueChanged<Category> onRenameCategory;
   final ValueChanged<Category> onDeleteCategory;
+  final ValueChanged<Category> onAddChild;
   final ValueChanged<Ingredient> onEditIngredient;
   final ValueChanged<Ingredient> onDeleteIngredient;
 
@@ -605,257 +605,228 @@ class _CategoryTile extends StatelessWidget {
     required this.depth,
     required this.onRenameCategory,
     required this.onDeleteCategory,
+    required this.onAddChild,
     required this.onEditIngredient,
     required this.onDeleteIngredient,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final indent = EdgeInsets.only(left: depth * 16.0);
-    // Same hue at every depth, just progressively darker - a category and
-    // its subcategories render as visually distinct, "cards within cards"
-    // tiles that still read as one connected branch.
-    final palette = _categoryPalette(depth);
+  State<_CategoryTile> createState() => _CategoryTileState();
+}
 
-    return Padding(
-      padding: indent,
-      // ExpansionTile lays its expanded `children` out in a Column that
-      // centers them and sizes itself to the widest child (see the
-      // ExpansionTile.expandedCrossAxisAlignment docs) - without this,
-      // every nested category/ingredient card would shrink-wrap to its own
-      // content width instead of filling the row, and end up a different
-      // width from its siblings. Forcing width: double.infinity makes this
-      // card claim the full width the Column actually has available.
-      child: SizedBox(
-        width: double.infinity,
-        child: Card(
-          clipBehavior: Clip.antiAlias,
-          color: palette.background,
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          child: Theme(
-            // Wrapping in a local Theme override removes the faint divider
-            // line ExpansionTile normally draws above/below itself when
-            // expanded - purely cosmetic, so nested tiles look cleaner.
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              // Always start expanded, per the "show the full expanded tree
-              // up front" requirement - the user can still tap to collapse
-              // individual branches afterwards.
-              initiallyExpanded: true,
-              iconColor: palette.foreground,
-              collapsedIconColor: palette.foreground,
-              title: Text(
-                category.name,
-                style: TextStyle(fontWeight: FontWeight.w600, color: palette.foreground),
-              ),
-              subtitle: Text(
-                _summaryFor(category),
-                style: TextStyle(color: palette.foreground.withValues(alpha: 0.75)),
-              ),
-              children: [
-                _CategoryActionsRow(
-                  iconColor: palette.foreground,
-                  onEdit: () => onRenameCategory(category),
-                  onDelete: () => onDeleteCategory(category),
-                ),
-                ...category.subcategories.map(
-                  (sub) => _CategoryTile(
-                    category: sub,
-                    depth: depth + 1,
-                    onRenameCategory: onRenameCategory,
-                    onDeleteCategory: onDeleteCategory,
-                    onEditIngredient: onEditIngredient,
-                    onDeleteIngredient: onDeleteIngredient,
-                  ),
-                ),
-                ...category.ingredients.map(
-                  (ingredient) => Padding(
-                    padding: EdgeInsets.only(left: (depth + 1) * 16.0),
-                    child: _IngredientCard(
-                      ingredient: ingredient,
-                      onEdit: () => onEditIngredient(ingredient),
-                      onDelete: () => onDeleteIngredient(ingredient),
+class _CategoryTileState extends State<_CategoryTile> {
+  // Starts expanded, so the full tree is visible up front - the user can
+  // still collapse individual branches afterwards.
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final category = widget.category;
+    final depth = widget.depth;
+    final hasChildren = category.subcategories.isNotEmpty || category.ingredients.isNotEmpty;
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: categoryRowColor(depth),
+          child: InkWell(
+            // Only a row with something inside it can be expanded/collapsed
+            // - an empty category's header is otherwise inert.
+            onTap: hasChildren ? () => setState(() => _expanded = !_expanded) : null,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16 + depth * 16.0, 10, 4, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          category.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          _summaryFor(category),
+                          style: TextStyle(color: mutedColor, fontSize: 12),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Dodaj do tej grupy',
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => widget.onAddChild(category),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Edytuj kategorię',
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => widget.onRenameCategory(category),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Usuń kategorię',
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    // Using the theme's error color signals "destructive
+                    // action" the same way delete buttons do elsewhere in
+                    // Material Design.
+                    color: Theme.of(context).colorScheme.error,
+                    onPressed: () => widget.onDeleteCategory(category),
+                  ),
+                  if (hasChildren)
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
+                      color: mutedColor,
+                    ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-// The row of action buttons shown at the top of every expanded category:
-// edit (rename) this category, or delete it. Adding new categories and
-// ingredients now happens through the bottom bar's single "Dodaj" flow
-// instead (see AddTemplateNodeDialog), which lets the user pick any
-// destination rather than only "directly under this exact category".
-class _CategoryActionsRow extends StatelessWidget {
-  // Tint for the edit button, matching the category tile's palette so the
-  // icon stays legible against whatever container color that depth landed
-  // on. Delete deliberately ignores this and always uses the theme's
-  // error color instead - see below.
-  final Color iconColor;
-
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  const _CategoryActionsRow({
-    required this.iconColor,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, bottom: 8),
-      child: Wrap(
-        spacing: 4,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Edytuj kategorię',
-            color: iconColor,
-            onPressed: onEdit,
+        const Divider(height: 1),
+        if (_expanded) ...[
+          ...category.subcategories.map(
+            (sub) => _CategoryTile(
+              category: sub,
+              depth: depth + 1,
+              onRenameCategory: widget.onRenameCategory,
+              onDeleteCategory: widget.onDeleteCategory,
+              onAddChild: widget.onAddChild,
+              onEditIngredient: widget.onEditIngredient,
+              onDeleteIngredient: widget.onDeleteIngredient,
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Usuń kategorię',
-            // Using the theme's error color signals "destructive action"
-            // the same way delete buttons do elsewhere in Material Design -
-            // kept distinct from the tile's own palette on purpose.
-            color: Theme.of(context).colorScheme.error,
-            onPressed: onDelete,
+          ...category.ingredients.map(
+            (ingredient) => _IngredientRow(
+              ingredient: ingredient,
+              depth: depth + 1,
+              onEdit: () => widget.onEditIngredient(ingredient),
+              onDelete: () => widget.onDeleteIngredient(ingredient),
+            ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
 
-// A detail card for one ingredient leaf: name, producer, action buttons,
-// description, bottle count, and its tags - every field the Ingredient
-// model carries, not just its name. Every ingredient tile uses the same
-// fixed color (see _ingredientPalette) regardless of how deep it sits in
-// the tree, so its color alone tells you "this is a leaf", while a
-// category's color tells you "this is a group" (and how deep).
-class _IngredientCard extends StatelessWidget {
+// ============================================================================
+// _IngredientRow
+// ----------------------------------------------------------------------------
+// One ingredient leaf, rendered as a single table row: icon, name, bottle
+// count, and its edit/delete actions, all on one line. A plain surface
+// color (no depth tint, unlike _CategoryTile) marks it as a leaf rather
+// than a group. Collapsed by default - tapping it (when there's anything to
+// show) expands to reveal producer/description/tags, the same
+// "table row that expands into a detail view" pattern used for ingredients
+// on the read-only browsing screen (see IngredientsScreen's _IngredientTile).
+// ============================================================================
+class _IngredientRow extends StatefulWidget {
   final Ingredient ingredient;
+  final int depth;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _IngredientCard({
+  const _IngredientRow({
     required this.ingredient,
+    required this.depth,
     required this.onEdit,
     required this.onDelete,
   });
 
   @override
+  State<_IngredientRow> createState() => _IngredientRowState();
+}
+
+class _IngredientRowState extends State<_IngredientRow> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final palette = _ingredientPalette();
+    final ingredient = widget.ingredient;
+    final hasDetails = ingredient.producer.isNotEmpty ||
+        ingredient.description.isNotEmpty ||
+        ingredient.tags.isNotEmpty;
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
 
-    // ExpansionTile lays its expanded `children` out in a Column that
-    // centers them and sizes itself to the widest child - without this,
-    // every ingredient card would shrink-wrap to its own content width
-    // instead of filling the row, so cards would end up different widths
-    // depending on how long their name/description happens to be. Forcing
-    // width: double.infinity makes every card claim the full width the
-    // Column actually has available.
-    return SizedBox(
-      width: double.infinity,
-      child: Card(
-        color: palette.background,
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          // A single vertical stack - no leading icon and no side-by-side
-          // buttons column, so name/producer sit directly above the
-          // action buttons instead of squeezed next to them.
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                ingredient.name,
-                style: TextStyle(fontWeight: FontWeight.w600, color: palette.foreground),
-              ),
-              // Only renders when there's actually a producer, so blank
-              // values don't leave an empty gap in the card.
-              if (ingredient.producer.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    ingredient.producer,
-                    style: TextStyle(color: palette.foreground.withValues(alpha: 0.85)),
-                  ),
-                ),
-
-              // Action buttons live right under the name/producer header,
-              // above the rest of the details.
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined),
-                      tooltip: 'Edytuj składnik',
-                      color: palette.foreground,
-                      onPressed: onEdit,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Usuń składnik',
-                      // Delete always stays the theme's error color, the
-                      // same "destructive action" convention used for
-                      // category deletion above.
-                      color: Theme.of(context).colorScheme.error,
-                      onPressed: onDelete,
-                    ),
-                  ],
-                ),
-              ),
-
-              if (ingredient.description.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    ingredient.description,
-                    style: TextStyle(color: palette.foreground),
-                  ),
-                ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Theme.of(context).colorScheme.surface,
+          child: InkWell(
+            onTap: hasDetails ? () => setState(() => _expanded = !_expanded) : null,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16 + widget.depth * 16.0, 10, 4, 10),
+              child: Row(
                 children: [
-                  Icon(Icons.local_bar_outlined, size: 16, color: palette.foreground),
-                  const SizedBox(width: 4),
+                  Icon(Icons.liquor_outlined, size: 16, color: mutedColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(ingredient.name, overflow: TextOverflow.ellipsis),
+                  ),
                   Text(
                     '${ingredient.bottlesCount} but.',
-                    style: TextStyle(color: palette.foreground),
+                    style: TextStyle(color: mutedColor, fontSize: 12),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Edytuj składnik',
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: widget.onEdit,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Usuń składnik',
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    color: Theme.of(context).colorScheme.error,
+                    onPressed: widget.onDelete,
+                  ),
+                  if (hasDetails)
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20,
+                      color: mutedColor,
+                    ),
                 ],
               ),
-              if (ingredient.tags.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  // Wrap lays chips out horizontally and only breaks onto
-                  // a new line once it runs out of room - so tags flow
-                  // sideways like a sentence, but can never spill past
-                  // the tile's own width.
-                  child: Wrap(
+            ),
+          ),
+        ),
+        if (_expanded && hasDetails)
+          Padding(
+            padding: EdgeInsets.fromLTRB(16 + (widget.depth + 1) * 16.0, 0, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (ingredient.producer.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(ingredient.producer, style: TextStyle(color: mutedColor)),
+                  ),
+                if (ingredient.description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(ingredient.description),
+                  ),
+                if (ingredient.tags.isNotEmpty)
+                  Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: ingredient.tags
                         .map(
                           (tag) => Chip(
                             label: Text(tag),
-                            // Fixed light-grey/dark-text styling,
-                            // independent of the tile's own palette -
-                            // keeps the chip readable no matter how dark
-                            // the card behind it is.
                             backgroundColor: Colors.grey.shade200,
                             labelStyle: const TextStyle(color: Colors.black87),
                             side: BorderSide.none,
@@ -865,11 +836,11 @@ class _IngredientCard extends StatelessWidget {
                         )
                         .toList(),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
+        const Divider(height: 1),
+      ],
     );
   }
 }

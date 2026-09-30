@@ -16,18 +16,10 @@ class CategoryPathPicker extends StatelessWidget {
   final Category? selected;
   final ValueChanged<Category?> onSelected;
 
-  // Shows an extra "Poziom główny" (top level) row above the tree that
-  // selects `null` - i.e. "no parent category". Only meaningful when
-  // adding a brand-new top-level category; an existing ingredient always
-  // has to live inside some category, so callers editing one should leave
-  // this false (the default).
-  final bool allowTopLevel;
-
   const CategoryPathPicker({
     required this.categories,
     required this.selected,
     required this.onSelected,
-    this.allowTopLevel = false,
     super.key,
   });
 
@@ -43,57 +35,16 @@ class CategoryPathPicker extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (allowTopLevel)
-              _SelectableRow(
-                label: 'Poziom główny',
-                isSelected: selected == null,
-                onTap: () => onSelected(null),
-              ),
-            ...categories.map(
-              (category) => _CategoryPathNode(
-                category: category,
-                pathPrefix: '',
-                selected: selected,
-                onSelected: onSelected,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// A plain, non-expandable selectable row - used only for the "Poziom
-// główny" pseudo-option above, which has no path or children of its own.
-class _SelectableRow extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _SelectableRow({required this.label, required this.isSelected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: isSelected ? scheme.primaryContainer.withValues(alpha: 0.5) : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                size: 18,
-                color: isSelected ? scheme.primary : scheme.outline,
-              ),
-              const SizedBox(width: 8),
-              Text(label, style: const TextStyle(fontStyle: FontStyle.italic)),
-            ],
-          ),
+          children: categories
+              .map(
+                (category) => _CategoryPathNode(
+                  category: category,
+                  pathPrefix: '',
+                  selected: selected,
+                  onSelected: onSelected,
+                ),
+              )
+              .toList(),
         ),
       ),
     );

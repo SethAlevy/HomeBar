@@ -142,11 +142,9 @@ class _EditTemplateIngredientDialogState extends State<EditTemplateIngredientDia
               CategoryPathPicker(
                 categories: widget.allCategories,
                 selected: _destinationCategory,
-                // allowTopLevel is left false (the default): an existing
-                // ingredient must always stay filed under some category,
-                // so the "Poziom główny" pseudo-option never applies here
-                // - onSelected below is therefore only ever called with a
-                // real Category, never null.
+                // An existing ingredient must always stay filed under some
+                // category - CategoryPathPicker only ever offers real
+                // categories to pick from, so `category` is never null here.
                 onSelected: (category) => setState(() => _destinationCategory = category!),
               ),
               const SizedBox(height: 16),

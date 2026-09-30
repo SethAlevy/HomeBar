@@ -77,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> with RouteAware {
   // yet - shows a small toast-like message instead of doing nothing.
   void _showComingSoon(BuildContext context, String label) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label — coming soon!')),
+      SnackBar(content: Text('$label — wkrótce!')),
     );
   }
 
